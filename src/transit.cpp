@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <atomic>
+#include <arpa/inet.h>
 #include <cstddef>
 #include <cstring>
 #include <iostream>
@@ -10,7 +10,6 @@
 #include <sys/socket.h>
 #include <thread>
 
-#include "config.hpp"
 #include "interface.hpp"
 #include "neighbor.hpp"
 #include "transit.hpp"
@@ -27,7 +26,7 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
     // 将socket绑定到指定的接口
     ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, this_name);
+    strcpy(ifr.ifr_name, THIS_ROUTER_NAME);
     if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0) {
         perror("send_packet: setsockopt");
     }
@@ -47,7 +46,7 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
     ospf_header->version = OSPF_VERSION;
     ospf_header->type = type;
     ospf_header->length = packet_len;
-    ospf_header->router_id = this_router_id;
+    ospf_header->router_id = ntohl(inet_addr(THIS_ROUTER_ID));
     ospf_header->area_id = intf->area_id;
     ospf_header->checksum = 0;
     ospf_header->auth_type = 0;
@@ -67,7 +66,7 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
     }
 }
 
-std::atomic<bool> running = true;
+std::atomic<bool> running;
 
 static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
@@ -89,7 +88,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
     // 1way/2way: hello报文中的neighbors列表中包含自己
     in_addr_t *attached_nbr = ospf_hello->neighbors;
     while (attached_nbr != reinterpret_cast<in_addr_t *>(ospf_packet + ospf_hdr->length)) {
-        if (*attached_nbr == htonl(this_router_id)) {
+        if (*attached_nbr == inet_addr(THIS_ROUTER_ID)) {
             to_2way = true;
             break;
         }
@@ -130,7 +129,7 @@ void recv_loop() {
     // 将socket绑定到指定的接口
     ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, this_name);
+    strcpy(ifr.ifr_name, THIS_ROUTER_NAME);
     if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0) {
         perror("recv_loop: setsockopt");
     }
@@ -160,7 +159,7 @@ void recv_loop() {
         ospf_hdr->network_to_host();
 
         // 如果是本机发送的数据包
-        if (ospf_hdr->router_id == this_router_id) {
+        if (ospf_hdr->router_id == ntohl(inet_addr(THIS_ROUTER_ID))) {
             continue;
         }
 
