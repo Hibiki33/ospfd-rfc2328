@@ -16,6 +16,9 @@
 
 namespace OSPF {
 
+std::atomic<bool> running;
+
+// 发送IP包，包含OSPF报文
 void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, Interface *intf) {
     // 创建一个socket
     auto socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_OSPF);
@@ -66,8 +69,6 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
     }
 }
 
-std::atomic<bool> running;
-
 static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
     auto ospf_hello = reinterpret_cast<OSPF::Hello *>(ospf_packet + sizeof(OSPF::Header));
@@ -82,7 +83,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
     nbr->backup_designated_router = ntohl(ospf_hello->backup_designated_router);
     nbr->priority = ntohl(ospf_hello->router_priority);
 
-    nbr->handle_event(Neighbor::Event::HELLO_RECEIVED);
+    nbr->event_hello_received();
 
     auto to_2way = false;
     // 1way/2way: hello报文中的neighbors列表中包含自己
@@ -95,9 +96,9 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
         attached_nbr++;
     }
     if (to_2way) {
-        nbr->handle_event(Neighbor::Event::TWOWAY_RECEIVED);
+        nbr->event_2way_received();
     } else {
-        nbr->handle_event(Neighbor::Event::ONEWAY_RECEIVED);
+        nbr->event_1way();
         return;
     }
 
@@ -166,8 +167,7 @@ void recv_loop() {
         // 查找接口
         auto intf_it =
             std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
-                return dst_ip & intf->mask == intf->ip_addr & intf->mask;
-                // TODO: 需要添加一种情况
+                return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(OSPF_ALL_SPF_ROUTERS));
             });
         if (intf_it == this_interfaces.end()) {
             continue;

@@ -66,40 +66,17 @@ public:
     ~Neighbor() = default;
 
 public:
-    /* 邻居事件状态机 */
-    enum class Event {
-        HELLO_RECEIVED = 0,
-        START,
-        TWOWAY_RECEIVED,
-        NEGOTIATION_DONE,
-        EXCHANGE_DONE,
-        BAD_LSREQ,
-        LOADING_DONE,
-        ADJ_OK,
-        SEQ_NUMBER_MISMATCH,
-        ONEWAY_RECEIVED,
-        KILL_NBR,
-        INACTIVITY_TIMER,
-        LL_DOWN
-    };
-
-    static const char *event_str[];
-
-    void handle_event(Event event);
-
-    static std::unordered_map<State, std::unordered_map<Event, State>> nsm;
-
-    // void event_hello_received();
-    // void event_start();
-    // void event_2way_received();
-    // void event_negotiation_done();
-    // void event_exchange_done();
-    // void event_bad_lsreq();
-    // void event_loading_done();
-    // void event_adj_ok();
-    // void event_seq_number_mismatch();
-    // void event_1way();
-    // void event_kill_nbr();
-    // void event_inactivity_timer();
-    // void event_ll_down();
+    void event_hello_received();
+    void event_start();
+    void event_2way_received();
+    void event_negotiation_done();
+    void event_exchange_done();
+    void event_bad_lsreq();
+    void event_loading_done();
+    void event_adj_ok();
+    void event_seq_number_mismatch();
+    void event_1way();
+    void event_kill_nbr();
+    void event_inactivity_timer();
+    void event_ll_down();
 };

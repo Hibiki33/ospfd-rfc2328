@@ -13,6 +13,7 @@
 #include "interface.hpp"
 #include "packet.hpp"
 #include "transit.hpp"
+#include "utils.hpp"
 
 void ospf_daemon();
 void ospf_normal();
@@ -25,10 +26,11 @@ int main(int argc, char *argv[]) {
     }
 
     // init interfaces
-    this_interfaces.emplace_back(new Interface((inet_addr(ETH0_IP)), ntohl(inet_addr(ETH0_MASK))));
+    this_interfaces.emplace_back(
+        new Interface((inet_addr(ETH0_IP)), ntohl(inet_addr(ETH0_MASK)), 0));
     for (auto& intf : this_interfaces) {
         intf->event_interface_up();
-        std::cout << "Interface " << intf->ip_addr << " up." << std::endl;
+        std::cout << "Interface " << ip_to_string(intf->ip_addr) << " up." << std::endl;
     }
 
     if (daemon) {

@@ -2,6 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+
+#include <arpa/inet.h>
 
 /* Fletcher checksum algorithm. */
 static inline uint16_t fletcher_checksum(const void *data, size_t len, size_t off) {
@@ -89,3 +92,10 @@ static inline uint64_t ntohll(uint64_t value) noexcept {
     return htonll(value);
 }
 #endif
+
+static inline std::string ip_to_string(uint32_t ip) noexcept {
+    char buf[INET_ADDRSTRLEN];
+    uint32_t ip_network_order = htonl(ip);
+    inet_ntop(AF_INET, &ip_network_order, buf, INET_ADDRSTRLEN);
+    return std::string(buf);
+}
