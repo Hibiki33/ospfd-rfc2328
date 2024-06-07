@@ -192,6 +192,7 @@ void recv_loop() {
     }
 }
 
-void send_loop() {}
+void send_loop() {
+}
 
 } // namespace OSPF

@@ -91,8 +91,11 @@ public:
     Neighbor *get_neighbor(in_addr_t ip_addr);
 
     Interface() = default;
-    Interface(in_addr_t ip_addr, in_addr_t mask) : ip_addr(ip_addr), mask(mask) {}
-    ~Interface() { clear_neighbors(); }
+    Interface(in_addr_t ip_addr, in_addr_t mask) : ip_addr(ip_addr), mask(mask) {
+    }
+    ~Interface() {
+        clear_neighbors();
+    }
 
 private:
     /* 选举DR和BDR */

@@ -68,7 +68,8 @@ void Interface::elect_designated_router() {
     printf("\tElecting finished.\n");
 }
 
-void Interface::event_interface_up() {}
+void Interface::event_interface_up() {
+}
 
 void Interface::event_wait_timer() {
     printf("Interface %x received wait_timer ", ip_addr);

@@ -61,7 +61,8 @@ public:
 
 public:
     Neighbor(in_addr_t ip_addr, Interface *interface)
-        : ip_addr(ip_addr), host_interface(interface) {}
+        : ip_addr(ip_addr), host_interface(interface) {
+    }
     ~Neighbor() = default;
 
 public:

@@ -69,7 +69,9 @@ static inline uint16_t crc_checksum(const void *data, size_t len) {
     return static_cast<uint16_t>(~sum);
 }
 
-constexpr bool is_little_endian() noexcept { return __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__; }
+constexpr bool is_little_endian() noexcept {
+    return __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
+}
 
 #ifndef htonll
 static inline uint64_t htonll(uint64_t value) noexcept {
@@ -83,5 +85,7 @@ static inline uint64_t htonll(uint64_t value) noexcept {
 #endif
 
 #ifndef ntohll
-static inline uint64_t ntohll(uint64_t value) noexcept { return htonll(value); }
+static inline uint64_t ntohll(uint64_t value) noexcept {
+    return htonll(value);
+}
 #endif

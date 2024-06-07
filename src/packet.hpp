@@ -327,7 +327,8 @@ struct PacketData {
     uint32_t duration;
 
     PacketData(const char *data, size_t len, Type type, uint32_t dst, uint32_t duration)
-        : data(data), len(len), type(type), dst(dst), age(0), duration(duration) {}
+        : data(data), len(len), type(type), dst(dst), age(0), duration(duration) {
+    }
     ~PacketData() = default;
 };
 
