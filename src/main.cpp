@@ -5,7 +5,9 @@
 
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <net/if.h>
 #include <netinet/ip.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -15,6 +17,7 @@
 #include "transit.hpp"
 #include "utils.hpp"
 
+void init_interfaces();
 void ospf_daemon();
 void ospf_normal();
 
@@ -26,12 +29,18 @@ int main(int argc, char *argv[]) {
     }
 
     // init interfaces
-    this_interfaces.emplace_back(
-        new Interface((inet_addr(ETH0_IP)), ntohl(inet_addr(ETH0_MASK)), 0));
-    for (auto& intf : this_interfaces) {
-        intf->event_interface_up();
-        std::cout << "Interface " << ip_to_string(intf->ip_addr) << " up." << std::endl;
+    init_interfaces();
+    // turn off promisc mode
+    for (auto intf : this_interfaces) {
+        ifreq ifr;
+        int fd = socket(AF_INET, SOCK_DGRAM, 0);
+        strncpy(ifr.ifr_name, intf->name, IFNAMSIZ);
+        ioctl(fd, SIOCGIFFLAGS, &ifr);
+        ifr.ifr_flags &= ~IFF_PROMISC;
+        ioctl(fd, SIOCSIFFLAGS, &ifr);
+        close(fd);
     }
+    exit(0);
 
     if (daemon) {
         // run as daemon
@@ -43,6 +52,78 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+void init_interfaces() {
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    const int MAX_IF = MAX_INTERFACE_NUM;
+    ifreq ifr[MAX_IF];
+
+    ifconf ifc;
+    ifc.ifc_len = sizeof(ifr);
+    ifc.ifc_req = ifr;
+    if (ioctl(fd, SIOCGIFCONF, &ifc) < 0) {
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    int num_ifr = ifc.ifc_len / sizeof(ifreq);
+
+    for (auto i = 0; i < num_ifr; ++i) {
+        ifreq *ifr = &ifc.ifc_req[i];
+        if (strcmp(ifr->ifr_name, "lo") == 0) {
+            continue;
+        }
+
+        // fetch interface name, ip addr, mask
+        auto intf = new Interface();
+        strncpy(intf->name, ifr->ifr_name, IFNAMSIZ);
+        if (ioctl(fd, SIOCGIFADDR, ifr) < 0) {
+            perror("ioctl SIOCGIFADDR");
+            delete intf;
+            continue;
+        }
+        intf->ip_addr = ntohl(((sockaddr_in *)&ifr->ifr_addr)->sin_addr.s_addr);
+        if (ioctl(fd, SIOCGIFNETMASK, ifr) < 0) {
+            perror("ioctl SIOCGIFNETMASK");
+            delete intf;
+            continue;
+        }
+        intf->mask = ntohl(((sockaddr_in *)&ifr->ifr_addr)->sin_addr.s_addr);
+
+        // turn on promisc mode
+        if (ioctl(fd, SIOCGIFFLAGS, ifr) < 0) {
+            perror("ioctl SIOCGIFFLAGS");
+            delete intf;
+            continue;
+        }
+        ifr->ifr_flags |= IFF_PROMISC;
+        if (ioctl(fd, SIOCSIFFLAGS, ifr) < 0) {
+            perror("ioctl SIOCSIFFLAGS");
+            delete intf;
+            continue;
+        }
+
+        // add to interfaces
+        this_interfaces.push_back(intf);
+    }
+
+    close(fd);
+
+    std::cout << "Found " << this_interfaces.size() << " interfaces." << std::endl;
+    for (auto intf : this_interfaces) {
+        std::cout << "Interface " << intf->name << ":" << std::endl
+                  << "\tip addr:" << ip_to_string(intf->ip_addr) << std::endl
+                  << "\tmask:" << ip_to_string(intf->mask) << std::endl;
+        intf->area_id = 0;
+        intf->hello_timer = 0;
+        intf->wait_timer = 0;
+        intf->event_interface_up();
+    }
 }
 
 void ospf_daemon() {

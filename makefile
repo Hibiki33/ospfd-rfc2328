@@ -6,18 +6,18 @@ ifneq ($(VERBOSE),1)
 VV=@
 endif
 
-MXX=/usr/bin/gcc
-AS=/usr/bin/gcc
-CU=/usr/bin/clang
 MM=/usr/bin/gcc
 CC=/usr/bin/gcc
+CU=/usr/bin/clang
 RC=/home/hibiki/.cargo/bin/rustc
+MXX=/usr/bin/gcc
 CXX=/usr/bin/gcc
+AS=/usr/bin/gcc
 
-LD=/usr/bin/g++
-RCLD=/home/hibiki/.cargo/bin/rustc
 AR=/usr/bin/ar
 RCAR=/home/hibiki/.cargo/bin/rustc
+LD=/usr/bin/g++
+RCLD=/home/hibiki/.cargo/bin/rustc
 SH=/usr/bin/g++
 RCSH=/home/hibiki/.cargo/bin/rustc
 
@@ -25,8 +25,8 @@ ospf_LD=/usr/bin/g++
 ospf_CXX=/usr/bin/gcc
 ospf_CXX=/usr/bin/gcc
 
-ospf_CXXFLAGS=-m64 -g -O0 -std=c++17 -I/usr/include -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"0.0.0.0\" -DETH0_IP=\"192.168.75.128\" -DETH0_MASK=\"255.255.255.0\"
-ospf_CXXFLAGS=-m64 -g -O0 -std=c++17 -I/usr/include -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"0.0.0.0\" -DETH0_IP=\"192.168.75.128\" -DETH0_MASK=\"255.255.255.0\"
+ospf_CXXFLAGS=-m64 -g -O0 -std=c++11 -I/usr/include -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"0.0.0.0\"
+ospf_CXXFLAGS=-m64 -g -O0 -std=c++11 -I/usr/include -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"0.0.0.0\"
 ospf_LDFLAGS=-m64 -L/usr/lib -lpthread
 
 default:  ospf

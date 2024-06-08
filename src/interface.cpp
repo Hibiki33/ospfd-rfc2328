@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 #include <list>
 #include <string>
@@ -6,24 +7,31 @@
 
 #include "interface.hpp"
 #include "neighbor.hpp"
+#include "utils.hpp"
 
 std::vector<Interface *> this_interfaces;
 
-static const char *state_str[] = {"DOWN",    "LOOPBACK", "WAITING", "POINT2POINT",
-                                  "DROTHER", "BACKUP",   "DR"};
+static const char *state_names[] = {"DOWN",    "LOOPBACK", "WAITING", "POINT2POINT",
+                                    "DROTHER", "BACKUP",   "DR"};
 
 void Interface::elect_designated_router() {
-    printf("\n\tStart electing DR and BDR...\n");
+    // printf("\n\tStart electing DR and BDR...\n");
+    std::cout << "Start electing DR and BDR..." << std::endl;
 
     std::list<Neighbor *> candidates;
 
     // 1. Select Candidates
     Neighbor self(ip_addr, this);
-    // TODO: init self
+    self.id = ntohl(inet_addr(THIS_ROUTER_ID));
+    self.designated_router = designated_router;
+    self.backup_designated_router = backup_designated_router;
     candidates.emplace_back(&self);
 
     for (auto& neighbor : neighbors) {
-        // TODO: compare neighbor state
+        if (static_cast<uint8_t>(neighbor.second->state) >= static_cast<uint8_t>(Neighbor::State::TWOWAY) && 
+            neighbor.second->priority != 0) {
+            candidates.emplace_back(neighbor.second);
+        }
     }
 
     // 2. Elect DR and BDR
@@ -34,6 +42,12 @@ void Interface::elect_designated_router() {
     std::vector<Neighbor *> bdr_candidates_lv1;
     std::vector<Neighbor *> bdr_candidates_lv2;
     for (auto& candidate : candidates) {
+        if (candidate->designated_router != candidate->ip_addr) {
+            bdr_candidates_lv2.emplace_back(candidate);
+            if (candidate->backup_designated_router == candidate->ip_addr) {
+                bdr_candidates_lv1.emplace_back(candidate);
+            }
+        }
     }
 
     auto neighbor_cmp = [](Neighbor *a, Neighbor *b) {
@@ -52,106 +66,112 @@ void Interface::elect_designated_router() {
     // 2.2 Elect DR
     std::vector<Neighbor *> dr_candidates;
     for (auto& candidate : candidates) {
+        if (candidate->designated_router == candidate->ip_addr) {
+            dr_candidates.emplace_back(candidate);
+        }
     }
     if (!dr_candidates.empty()) {
         dr = *std::max_element(dr_candidates.begin(), dr_candidates.end(), neighbor_cmp);
     } // must be not empty
 
-    if (dr->ip_addr == ip_addr && designated_router != ip_addr) {
-    }
-
     designated_router = dr->ip_addr;
     backup_designated_router = bdr->ip_addr;
 
-    printf("\tNew DR: %x\n", designated_router);
-    printf("\tNew BDR: %x\n", backup_designated_router);
-    printf("\tElecting finished.\n");
+    // printf("\tnew DR: %x\n", designated_router);
+    // printf("\tnew BDR: %x\n", backup_designated_router);
+    // printf("Electing finished.\n");
+    std::cout << "\tnew DR: " << ip_to_string(designated_router) << std::endl;
+    std::cout << "\tnew BDR: " << ip_to_string(backup_designated_router) << std::endl;
+    std::cout << "Electing finished." << std::endl;
 }
 
+// P2P/P2MP/VIRTUAL : State::DOWN -> State::POINT2POINT
+// BROADCAST/NBMA : State::DOWN -> State::WAITING
 void Interface::event_interface_up() {
+    assert(state == State::DOWN);
+    std::cout << "Interface " << ip_to_string(ip_addr) << " received interface_up:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    switch (type) {
+    case Type::P2P:
+    case Type::P2MP:
+    case Type::VIRTUAL:
+        state = State::POINT2POINT;
+        break;
+    case Type::BROADCAST:
+    case Type::NBMA:
+        state = State::WAITING;
+        break;
+    default:
+        break;
+    }
+    std::cout << state_names[(int)state] << std::endl;
 }
 
+// State::WAITING -> State::DR/BACKUP/DROTHER
 void Interface::event_wait_timer() {
-    printf("Interface %x received wait_timer ", ip_addr);
-    if (state == State::WAITING) {
-        // TODO: elect DR and BDR
-        if (ip_addr == designated_router) {
-            printf("and its state from WAITING -> %s.\n", state_str[(int)State::DR]);
-            state = State::DR;
-        } else if (ip_addr == backup_designated_router) {
-            printf("and its state from WAITING -> %s.\n", state_str[(int)State::BACKUP]);
-            state = State::BACKUP;
-        } else {
-            printf("and its state from WAITING -> %s.\n", state_str[(int)State::DROTHER]);
-            state = State::DROTHER;
-        }
+    assert(state == State::WAITING);
+    elect_designated_router();
+    std::cout << "Interface " << ip_to_string(ip_addr) << " received wait_timer:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    if (ip_addr == designated_router) {
+        state = State::DR;
+    } else if (ip_addr == backup_designated_router) {
+        state = State::BACKUP;
     } else {
-        printf("and rejected.\n");
+        state = State::DROTHER;
     }
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Interface::event_backup_seen() {
-    printf("Interface %x received backup_seen ", ip_addr);
-    if (state == State::WAITING) {
-        // TODO: elect DR and BDR
-        if (ip_addr == designated_router) {
-            printf("and its state from WAITING -> %s.\n", state_str[(int)State::DR]);
-            state = State::DR;
-        } else if (ip_addr == backup_designated_router) {
-            printf("and its state from WAITING -> %s.\n", state_str[(int)State::BACKUP]);
-            state = State::BACKUP;
-        } else {
-            printf("and its state from WAITING -> %s.\n", state_str[(int)State::DROTHER]);
-            state = State::DROTHER;
-        }
+    assert(state == State::WAITING);
+    elect_designated_router();
+    std::cout << "Interface " << ip_to_string(ip_addr) << " received backup_seen:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    if (ip_addr == designated_router) {
+        state = State::DR;
+    } else if (ip_addr == backup_designated_router) {
+        state = State::BACKUP;
     } else {
-        printf("and rejected.\n");
+        state = State::DROTHER;
     }
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Interface::event_neighbor_change() {
-    printf("Interface %x received neighbor_change ", ip_addr);
-    if (state == State::DR || state == State::BACKUP || state == State::DROTHER) {
-        // elect_designated_router();
-        if (ip_addr == designated_router) {
-            printf("and its state from %s -> %s.\n", state_str[(int)state],
-                   state_str[(int)State::DR]);
-            state = State::DR;
-        } else if (ip_addr == backup_designated_router) {
-            printf("and its state from %s -> %s.\n", state_str[(int)state],
-                   state_str[(int)State::BACKUP]);
-            state = State::BACKUP;
-        } else {
-            printf("and its state from %s -> %s.\n", state_str[(int)state],
-                   state_str[(int)State::DROTHER]);
-            state = State::DROTHER;
-        }
+    assert(state == State::DR || state == State::BACKUP || state == State::DROTHER);
+    elect_designated_router();
+    std::cout << "Interface " << ip_to_string(ip_addr) << " received neighbor_change:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    if (ip_addr == designated_router) {
+        state = State::DR;
+    } else if (ip_addr == backup_designated_router) {
+        state = State::BACKUP;
     } else {
-        printf("and rejected.\n");
+        state = State::DROTHER;
     }
+    std::cout << state_names[(int)state] << std::endl;
 }
 
+// Any -> State::LOOPBACK
 void Interface::event_loop_ind() {
-    printf("Interface %x received loop_ind ", ip_addr);
-    printf("and its state from %s -> %s.\n", state_str[(int)state],
-           state_str[(int)State::LOOPBACK]);
+    std::cout << "Interface " << ip_to_string(ip_addr) << " received loop_ind:"
+              << "\tstate " << state_names[(int)state] << " -> ";
     state = State::LOOPBACK;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
+// State::LOOPBACK -> State::DOWN
 void Interface::event_unloop_ind() {
-    printf("Interface %x received unloop_ind ", ip_addr);
-    if (state == State::LOOPBACK) {
-        printf("and its state from LOOPBACK -> %s.\n", state_str[(int)State::DOWN]);
-        state = State::DOWN;
-    } else {
-        printf("and rejected.\n");
-    }
+    assert(state == State::LOOPBACK);
 }
 
+// Any -> State::DOWN  
 void Interface::event_interface_down() {
-    printf("Interface %x received interface_down ", ip_addr);
-    printf("and its state from %s -> %s.\n", state_str[(int)state], state_str[(int)State::DOWN]);
+    std::cout << "Interface " << ip_to_string(ip_addr) << " received interface_down:"
+              << "\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 Neighbor *Interface::add_neighbor(in_addr_t ip) {

@@ -1,8 +1,10 @@
 #pragma once
 
-#include <netinet/in.h>
 #include <unordered_map>
 #include <vector>
+
+#include <net/if.h>
+#include <netinet/in.h>
 
 class Neighbor;
 
@@ -74,6 +76,9 @@ public:
     /* 验证密码 */
     uint64_t auth_key;
 
+    /* 接口名称 */
+    char name[IFNAMSIZ];
+
 public:
     /* 改变接口状态的事件 */
     void event_interface_up();
@@ -104,3 +109,4 @@ private:
 };
 
 extern std::vector<Interface *> this_interfaces;
+constexpr const int MAX_INTERFACE_NUM = 16;

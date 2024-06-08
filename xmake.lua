@@ -1,6 +1,6 @@
 add_rules("mode.debug", "mode.release")
 
-set_languages("c++17")
+set_languages("c++11")
 
 target("ospf")
     set_kind("binary")
@@ -14,12 +14,6 @@ target("ospf")
         "OSPF_VERSION=2",
         "THIS_ROUTER_NAME=\"R0\"",
         "THIS_ROUTER_ID=\"0.0.0.0\""
-    )
-
-    -- define router interfaces
-    add_defines(
-        "ETH0_IP=\"192.168.75.128\"",
-        "ETH0_MASK=\"255.255.255.0\""
     )
 
 task("fix-style")
