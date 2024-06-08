@@ -75,10 +75,22 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
 static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
     auto ospf_hello = reinterpret_cast<OSPF::Hello *>(ospf_packet + sizeof(OSPF::Header));
-    auto nbr = intf->get_neighbor(src_ip);
-    if (nbr == nullptr) {
-        nbr = intf->add_neighbor(src_ip);
+    // auto nbr = intf->get_neighbor(src_ip);
+    // if (nbr == nullptr) {
+    //     nbr = intf->add_neighbor(src_ip);
+    // }
+    Neighbor *nbr = nullptr;
+    for (auto& neighbor : intf->neighbors) {
+        if (neighbor->ip_addr == src_ip) {
+            nbr = neighbor;
+            break;
+        }
     }
+    if (nbr == nullptr) {
+        nbr = new Neighbor(src_ip, intf);
+        intf->neighbors.push_back(nbr);
+    }
+
     nbr->id = ospf_hdr->router_id; // hdr已经是host字节序
     auto prev_ndr = nbr->designated_router;
     auto prev_nbdr = nbr->backup_designated_router;
@@ -120,7 +132,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
 
 static void recv_process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto ospf_dd = reinterpret_cast<OSPF::DD *>(ospf_packet + sizeof(OSPF::Header));
-    auto nbr = intf->get_neighbor(src_ip);
+    // auto nbr = intf->get_neighbor(src_ip);
 }
 
 void recv_loop() {
@@ -207,7 +219,7 @@ static size_t send_produce_hello(Interface *intf, char *body) {
 
     auto attached_nbr = hello->neighbors;
     for (auto& nbr : intf->neighbors) {
-        *attached_nbr = nbr.first;
+        *attached_nbr = nbr->ip_addr;
         attached_nbr++;
     }
 
@@ -236,9 +248,8 @@ void send_loop() {
             }
 
             // For each neighbor
-            for (auto& pair : intf->neighbors) {
-                auto nbr_ip = pair.first;
-                auto nbr = pair.second;
+            for (auto& nbr : intf->neighbors) {
+                auto nbr_ip = nbr->ip_addr;
                 if (nbr->state == Neighbor::State::DOWN) {
                     continue;
                 }
@@ -247,7 +258,7 @@ void send_loop() {
                     nbr->rxmt_timer = 0;
 
                     // DD packet
-                    if (nbr->state == Neighbor::State::EXSTART || 
+                    if (nbr->state == Neighbor::State::EXSTART ||
                         nbr->state == Neighbor::State::EXCHANGE) {
                         auto len = send_produce_dd(intf, data + sizeof(OSPF::Header), nbr);
                         send_packet(data, len, OSPF::Type::DD, nbr_ip, intf);
@@ -259,7 +270,6 @@ void send_loop() {
                     // LSR packet
                     if (nbr->state == Neighbor::State::LOADING ||
                         nbr->state == Neighbor::State::EXCHANGE) {
-                        
                     }
                 }
             }

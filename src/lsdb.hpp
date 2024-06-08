@@ -18,6 +18,9 @@ private:
     std::vector<NetworkLSA *> network_lsas;
     std::mutex network_lsas_mutex;
 
+    std::vector<SummaryLSA *> summary_lsas; // 事实上，在本实验中不会被使用
+    std::mutex summary_lsas_mutex;
+
     uint16_t max_age = 3600;     // max time an lsa can survive, default 3600s
     uint16_t max_age_diff = 900; // max time an lsa flood the AS, default 900s
 

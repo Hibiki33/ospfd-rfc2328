@@ -1,6 +1,6 @@
 #pragma once
 
-#include <unordered_map>
+#include <list>
 #include <vector>
 
 #include <net/if.h>
@@ -61,7 +61,7 @@ public:
     uint32_t wait_timer;
 
     /* 该接口的邻接路由器 */
-    std::unordered_map<in_addr_t, Neighbor *> neighbors;
+    std::list<Neighbor *> neighbors;
 
     /* 选举出的DR */
     in_addr_t designated_router;
@@ -90,18 +90,16 @@ public:
     void event_interface_down();
 
     /* 管理邻居 */
-    Neighbor *add_neighbor(in_addr_t ip_addr);
-    void remove_neighbor(in_addr_t ip_addr);
-    void clear_neighbors();
-    Neighbor *get_neighbor(in_addr_t ip_addr);
+    // Neighbor *add_neighbor(in_addr_t ip_addr);
+    // void remove_neighbor(in_addr_t ip_addr);
+    // void clear_neighbors();
+    // Neighbor *get_neighbor(in_addr_t ip_addr);
 
     Interface() = default;
     Interface(in_addr_t ip_addr, in_addr_t mask, uint32_t area_id)
         : ip_addr(ip_addr), mask(mask), area_id(area_id) {
     }
-    ~Interface() {
-        clear_neighbors();
-    }
+    ~Interface();
 
 private:
     /* 选举DR和BDR */

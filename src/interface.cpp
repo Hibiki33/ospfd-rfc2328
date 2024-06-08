@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <list>
 #include <string>
-#include <cstring>
 #include <vector>
 
 #include <net/if.h>
@@ -36,9 +36,10 @@ void Interface::elect_designated_router() {
     candidates.emplace_back(&self);
 
     for (auto& neighbor : neighbors) {
-        if (static_cast<uint8_t>(neighbor.second->state) >= static_cast<uint8_t>(Neighbor::State::TWOWAY) && 
-            neighbor.second->priority != 0) {
-            candidates.emplace_back(neighbor.second);
+        if (static_cast<uint8_t>(neighbor->state) >=
+                static_cast<uint8_t>(Neighbor::State::TWOWAY) &&
+            neighbor->priority != 0) {
+            candidates.emplace_back(neighbor);
         }
     }
 
@@ -174,7 +175,7 @@ void Interface::event_unloop_ind() {
     assert(state == State::LOOPBACK);
 }
 
-// Any -> State::DOWN  
+// Any -> State::DOWN
 void Interface::event_interface_down() {
     std::cout << "Interface " << ip_to_string(ip_addr) << " received interface_down:"
               << "\tstate " << state_names[(int)state] << " -> ";
@@ -182,34 +183,33 @@ void Interface::event_interface_down() {
     std::cout << state_names[(int)state] << std::endl;
 }
 
-Neighbor *Interface::add_neighbor(in_addr_t ip) {
-    if (neighbors.find(ip) == neighbors.end()) {
-        neighbors[ip] = new Neighbor(ip, this);
-    }
-    return neighbors[ip];
-}
+// Neighbor *Interface::add_neighbor(in_addr_t ip) {
+//     if (neighbors.find(ip) == neighbors.end()) {
+//         neighbors[ip] = new Neighbor(ip, this);
+//     }
+//     return neighbors[ip];
+// }
 
-void Interface::remove_neighbor(in_addr_t ip) {
-    if (neighbors.find(ip) != neighbors.end()) {
-        delete neighbors[ip];
-        neighbors.erase(ip);
-    }
-}
+// void Interface::remove_neighbor(in_addr_t ip) {
+//     if (neighbors.find(ip) != neighbors.end()) {
+//         delete neighbors[ip];
+//         neighbors.erase(ip);
+//     }
+// }
 
-void Interface::clear_neighbors() {
-    for (auto& neighbor : neighbors) {
-        delete neighbor.second;
-    }
-    neighbors.clear();
-}
+// void Interface::clear_neighbors() {
+//     for (auto& neighbor : neighbors) {
+//         delete neighbor.second;
+//     }
+//     neighbors.clear();
+// }
 
-Neighbor *Interface::get_neighbor(in_addr_t ip) {
-    if (neighbors.find(ip) == neighbors.end()) {
-        return nullptr;
-    }
-    return neighbors[ip];
-}
-
+// Neighbor *Interface::get_neighbor(in_addr_t ip) {
+//     if (neighbors.find(ip) == neighbors.end()) {
+//         return nullptr;
+//     }
+//     return neighbors[ip];
+// }
 
 void init_interfaces() {
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -279,5 +279,12 @@ void init_interfaces() {
         intf->hello_timer = 0;
         intf->wait_timer = 0;
         intf->event_interface_up();
+    }
+}
+
+Interface::~Interface() {
+    // clear_neighbors();
+    for (auto& neighbor : neighbors) {
+        delete neighbor;
     }
 }

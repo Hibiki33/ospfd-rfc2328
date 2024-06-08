@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <list>
+
 #include <netinet/in.h>
-#include <unordered_map>
+
+#include "packet.hpp"
 
 class Interface;
 
@@ -56,9 +59,14 @@ public:
     /* 邻居的重传计时器 */
     uint32_t rxmt_timer = 0;
 
-    // TODO: link_state_rxmt_list
-    // TODO: database_summary_list
-    // TODO: link_state_request_list
+    /* 需要重传的链路状态数据 */
+    std::list<LSA::Base *> link_state_rxmt_list;
+
+    /* Exchange状态下的链路状态数据 */
+    std::list<LSA::Base *> link_state_list;
+
+    /* Loading状态下需要请求的链路状态数据 */
+    std::list<LSA::Base *> link_state_request_list;
 
 public:
     Neighbor(in_addr_t ip_addr, Interface *interface)

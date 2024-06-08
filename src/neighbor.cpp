@@ -1,13 +1,12 @@
-#include <iostream>
 #include <cassert>
+#include <iostream>
 
-#include "neighbor.hpp"
 #include "interface.hpp"
-#include "utils.hpp"    
+#include "neighbor.hpp"
+#include "utils.hpp"
 
-static const char *state_names[] {
-    "DOWN", "ATTEMPT", "INIT", "TWOWAY", "EXSTART", "EXCHANGE", "LOADING", "FULL"
-};
+static const char *state_names[]{"DOWN",    "ATTEMPT",  "INIT",    "TWOWAY",
+                                 "EXSTART", "EXCHANGE", "LOADING", "FULL"};
 
 void Neighbor::event_hello_received() {
     assert(state == State::DOWN || state == State::ATTEMPT || state == State::INIT);
@@ -47,25 +46,37 @@ void Neighbor::event_2way_received() {
         break;
     default:
         state = State::EXSTART;
-        dd_seq_num = 0;
+        dd_seq_num = 114514;
         is_master = true;
+        // TODO: prepare empty DD packet
         break;
     }
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_negotiation_done() {
-    // TODO: not implemented
+    assert(state == State::EXSTART);
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " negotiation done:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::EXCHANGE;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_exchange_done() {
-    // TODO: not implemented
+    assert(state == State::EXCHANGE);
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " exchange done:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::LOADING;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_bad_lsreq() {
+    assert(state >= State::EXCHANGE);
     // TODO: not implemented
 }
 
 void Neighbor::event_loading_done() {
+    assert(state == State::LOADING);
     std::cout << "Neighbor " << ip_to_string(ip_addr) << " loading done:"
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::FULL;
@@ -73,25 +84,51 @@ void Neighbor::event_loading_done() {
 }
 
 void Neighbor::event_adj_ok() {
-    // TODO: not implemented
+    assert(state == State::TWOWAY || state >= State::EXSTART);
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " adj ok:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+
+    // not implemented yet
+
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_seq_number_mismatch() {
+    assert(state >= State::EXCHANGE);
     // TODO: not implemented
 }
+
+// TODO: 下面4个event需要实现：清除连接状态重传列表、数据库汇总列表和连接状态请求列表中的LSA
 
 void Neighbor::event_1way_received() {
-    // TODO: not implemented
+    assert(state >= State::TWOWAY);
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " received 1way:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::INIT;
+    inactivity_timer = 40;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
+// Force to kill the neighbor, Any -> State::DOWN
 void Neighbor::event_kill_nbr() {
-    // TODO: not implemented
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " kill:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::DOWN;
+    inactivity_timer = 0;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_inactivity_timer() {
-    // TODO: not implemented
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " inactivity timer:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::DOWN;
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_ll_down() {
-    // TODO: not implemented
+    std::cout << "Neighbor " << ip_to_string(ip_addr) << " ll down:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::DOWN;
+    inactivity_timer = 0;
+    std::cout << state_names[(int)state] << std::endl;
 }
