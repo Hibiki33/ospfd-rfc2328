@@ -9,6 +9,7 @@
 #include <netinet/ip.h>
 #include <sys/socket.h>
 #include <thread>
+#include <unistd.h>
 
 #include "interface.hpp"
 #include "neighbor.hpp"
@@ -67,6 +68,8 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
                sizeof(dst_sockaddr)) < 0) {
         perror("send_packet: sendto");
     }
+
+    close(socket_fd);
 }
 
 static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
@@ -98,7 +101,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
     if (to_2way) {
         nbr->event_2way_received();
     } else {
-        nbr->event_1way();
+        nbr->event_1way_received();
         return;
     }
 
@@ -167,7 +170,7 @@ void recv_loop() {
         // 查找接口
         auto intf_it =
             std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
-                return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(OSPF_ALL_SPF_ROUTERS));
+                return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS));
             });
         if (intf_it == this_interfaces.end()) {
             continue;
@@ -192,7 +195,77 @@ void recv_loop() {
     }
 }
 
+static size_t send_produce_hello(Interface *intf, char *body) {
+    auto hello = reinterpret_cast<OSPF::Hello *>(body);
+    hello->network_mask = intf->mask;
+    hello->hello_interval = intf->hello_interval;
+    hello->options = 0x02;
+    hello->router_priority = intf->router_priority;
+    hello->router_dead_interval = intf->router_dead_interval;
+    hello->designated_router = intf->designated_router;
+    hello->backup_designated_router = intf->backup_designated_router;
+
+    auto attached_nbr = hello->neighbors;
+    for (auto& nbr : intf->neighbors) {
+        *attached_nbr = nbr.first;
+        attached_nbr++;
+    }
+
+    hello->host_to_network(intf->neighbors.size());
+
+    return sizeof(OSPF::Hello) + sizeof(in_addr_t) * intf->neighbors.size();
+}
+
+static size_t send_produce_dd(Interface *intf, char *body, Neighbor *nbr) {
+    return 0;
+}
+
 void send_loop() {
+    char data[ETH_DATA_LEN];
+    while (running) {
+        for (auto& intf : this_interfaces) {
+            if (intf->state == Interface::State::DOWN) {
+                continue;
+            }
+
+            // Hello packet
+            if ((++intf->hello_timer) >= intf->hello_interval) {
+                intf->hello_timer = 0;
+                auto len = send_produce_hello(intf, data + sizeof(OSPF::Header));
+                send_packet(data, len, OSPF::Type::HELLO, ntohl(inet_addr(ALL_SPF_ROUTERS)), intf);
+            }
+
+            // For each neighbor
+            for (auto& pair : intf->neighbors) {
+                auto nbr_ip = pair.first;
+                auto nbr = pair.second;
+                if (nbr->state == Neighbor::State::DOWN) {
+                    continue;
+                }
+
+                if ((++nbr->rxmt_timer) >= intf->rxmt_interval) {
+                    nbr->rxmt_timer = 0;
+
+                    // DD packet
+                    if (nbr->state == Neighbor::State::EXSTART || 
+                        nbr->state == Neighbor::State::EXCHANGE) {
+                        auto len = send_produce_dd(intf, data + sizeof(OSPF::Header), nbr);
+                        send_packet(data, len, OSPF::Type::DD, nbr_ip, intf);
+                        if (!nbr->is_master && nbr->state == Neighbor::State::EXCHANGE) {
+                            nbr->event_exchange_done();
+                        }
+                    }
+
+                    // LSR packet
+                    if (nbr->state == Neighbor::State::LOADING ||
+                        nbr->state == Neighbor::State::EXCHANGE) {
+                        
+                    }
+                }
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 } // namespace OSPF

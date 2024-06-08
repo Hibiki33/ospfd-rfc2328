@@ -110,3 +110,5 @@ private:
 
 extern std::vector<Interface *> this_interfaces;
 constexpr const int MAX_INTERFACE_NUM = 16;
+
+void init_interfaces();

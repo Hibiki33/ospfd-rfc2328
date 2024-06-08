@@ -17,7 +17,7 @@ void send_loop();
 
 extern std::atomic<bool> running;
 
-constexpr const char *OSPF_ALL_SPF_ROUTERS = "224.0.0.5";
-constexpr const char *OSPF_ALL_DR_ROUTERS = "224.0.0.6";
+constexpr const char *ALL_SPF_ROUTERS = "224.0.0.5";
+constexpr const char *ALL_DR_ROUTERS = "224.0.0.6";
 
 } // namespace OSPF

@@ -285,6 +285,17 @@ struct Hello {
     in_addr_t designated_router;
     in_addr_t backup_designated_router;
     in_addr_t neighbors[0];
+
+    /* Convert host to network byte order. */
+    void host_to_network(size_t nbr_num) noexcept {
+        hello_interval = htons(hello_interval);
+        router_dead_interval = htonl(router_dead_interval);
+        designated_router = htonl(designated_router);
+        backup_designated_router = htonl(backup_designated_router);
+        for (auto i = 0; i < nbr_num; ++i) {
+            neighbors[i] = htonl(neighbors[i]);
+        }
+    }
 } __attribute__((packed));
 
 /* OSPF database description packet structure. */

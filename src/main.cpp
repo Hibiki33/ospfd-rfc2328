@@ -17,9 +17,8 @@
 #include "transit.hpp"
 #include "utils.hpp"
 
-void init_interfaces();
 void ospf_daemon();
-void ospf_normal();
+void ospf_run();
 
 int main(int argc, char *argv[]) {
     // parse args
@@ -48,82 +47,10 @@ int main(int argc, char *argv[]) {
         daemon_thread.detach();
     } else {
         // run normally
-        ospf_normal();
+        ospf_run();
     }
 
     return 0;
-}
-
-void init_interfaces() {
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    const int MAX_IF = MAX_INTERFACE_NUM;
-    ifreq ifr[MAX_IF];
-
-    ifconf ifc;
-    ifc.ifc_len = sizeof(ifr);
-    ifc.ifc_req = ifr;
-    if (ioctl(fd, SIOCGIFCONF, &ifc) < 0) {
-        close(fd);
-        exit(EXIT_FAILURE);
-    }
-
-    int num_ifr = ifc.ifc_len / sizeof(ifreq);
-
-    for (auto i = 0; i < num_ifr; ++i) {
-        ifreq *ifr = &ifc.ifc_req[i];
-        if (strcmp(ifr->ifr_name, "lo") == 0) {
-            continue;
-        }
-
-        // fetch interface name, ip addr, mask
-        auto intf = new Interface();
-        strncpy(intf->name, ifr->ifr_name, IFNAMSIZ);
-        if (ioctl(fd, SIOCGIFADDR, ifr) < 0) {
-            perror("ioctl SIOCGIFADDR");
-            delete intf;
-            continue;
-        }
-        intf->ip_addr = ntohl(((sockaddr_in *)&ifr->ifr_addr)->sin_addr.s_addr);
-        if (ioctl(fd, SIOCGIFNETMASK, ifr) < 0) {
-            perror("ioctl SIOCGIFNETMASK");
-            delete intf;
-            continue;
-        }
-        intf->mask = ntohl(((sockaddr_in *)&ifr->ifr_addr)->sin_addr.s_addr);
-
-        // turn on promisc mode
-        if (ioctl(fd, SIOCGIFFLAGS, ifr) < 0) {
-            perror("ioctl SIOCGIFFLAGS");
-            delete intf;
-            continue;
-        }
-        ifr->ifr_flags |= IFF_PROMISC;
-        if (ioctl(fd, SIOCSIFFLAGS, ifr) < 0) {
-            perror("ioctl SIOCSIFFLAGS");
-            delete intf;
-            continue;
-        }
-
-        // add to interfaces
-        this_interfaces.push_back(intf);
-    }
-
-    close(fd);
-
-    std::cout << "Found " << this_interfaces.size() << " interfaces." << std::endl;
-    for (auto intf : this_interfaces) {
-        std::cout << "Interface " << intf->name << ":" << std::endl
-                  << "\tip addr:" << ip_to_string(intf->ip_addr) << std::endl
-                  << "\tmask:" << ip_to_string(intf->mask) << std::endl;
-        intf->area_id = 0;
-        intf->hello_timer = 0;
-        intf->wait_timer = 0;
-        intf->event_interface_up();
-    }
 }
 
 void ospf_daemon() {
@@ -169,12 +96,12 @@ void ospf_daemon() {
 
     close(STDIN_FILENO);
 
-    ospf_normal();
+    ospf_run();
 
     std::cout << "OSPF daemon stopped." << std::endl;
 }
 
-void ospf_normal() {
+void ospf_run() {
     std::cout << "OSPF send/recv started." << std::endl;
 
     OSPF::running = true;

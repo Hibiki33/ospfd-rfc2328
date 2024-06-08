@@ -25,8 +25,6 @@ public:
         FULL
     } state = State::DOWN;
 
-    static const char *state_str[];
-
     /* 非活跃计时器 */
     uint32_t inactivity_timer = 40;
 
@@ -55,6 +53,9 @@ public:
 
     Interface *host_interface;
 
+    /* 邻居的重传计时器 */
+    uint32_t rxmt_timer = 0;
+
     // TODO: link_state_rxmt_list
     // TODO: database_summary_list
     // TODO: link_state_request_list
@@ -75,7 +76,7 @@ public:
     void event_loading_done();
     void event_adj_ok();
     void event_seq_number_mismatch();
-    void event_1way();
+    void event_1way_received();
     void event_kill_nbr();
     void event_inactivity_timer();
     void event_ll_down();
