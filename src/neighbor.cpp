@@ -9,7 +9,7 @@ static const char *state_names[]{"DOWN",    "ATTEMPT",  "INIT",    "TWOWAY",
                                  "EXSTART", "EXCHANGE", "LOADING", "FULL"};
 
 void Neighbor::event_hello_received() {
-    assert(state == State::DOWN || state == State::ATTEMPT || state == State::INIT);
+    // assert(state == State::DOWN || state == State::ATTEMPT || state == State::INIT);
     std::cout << "Neighbor " << ip_to_string(ip_addr) << " received hello:"
               << "\tstate " << state_names[(int)state] << " -> ";
     switch (state) {
@@ -20,6 +20,7 @@ void Neighbor::event_hello_received() {
         inactivity_timer = 40;
         break;
     default:
+        // 如果在Init之上的状态收到Hello，无须操作
         break;
     }
     std::cout << state_names[(int)state] << std::endl;
@@ -36,20 +37,22 @@ void Neighbor::event_start() {
 
 // TODO: need to implement details
 void Neighbor::event_2way_received() {
-    assert(state == State::INIT);
+    assert(state == State::INIT || state >= State::TWOWAY);
     std::cout << "Neighbor " << ip_to_string(ip_addr) << " received 2way:"
               << "\tstate " << state_names[(int)state] << " -> ";
-    switch (host_interface->type) {
-    case Interface::Type::BROADCAST:
-    case Interface::Type::NBMA:
-        state = State::TWOWAY;
-        break;
-    default:
-        state = State::EXSTART;
-        dd_seq_num = 114514;
-        is_master = true;
-        // TODO: prepare empty DD packet
-        break;
+    if (state == State::INIT) {
+        switch (host_interface->type) {
+        case Interface::Type::BROADCAST:
+        case Interface::Type::NBMA:
+            state = State::TWOWAY;
+            break;
+        default:
+            state = State::EXSTART;
+            dd_seq_num = 114514;
+            is_master = true;
+            // TODO: prepare empty DD packet
+            break;
+        }
     }
     std::cout << state_names[(int)state] << std::endl;
 }
@@ -101,7 +104,7 @@ void Neighbor::event_seq_number_mismatch() {
 // TODO: 下面4个event需要实现：清除连接状态重传列表、数据库汇总列表和连接状态请求列表中的LSA
 
 void Neighbor::event_1way_received() {
-    assert(state >= State::TWOWAY);
+    assert(state >= State::TWOWAY || state == State::INIT);
     std::cout << "Neighbor " << ip_to_string(ip_addr) << " received 1way:"
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::INIT;

@@ -101,7 +101,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
     nbr->event_hello_received();
 
     auto to_2way = false;
-    // 1way/2way: hello报文中的neighbors列表中包含自己
+    // 1way/2way: hello报文中的neighbors列表中是否包含自己
     in_addr_t *attached_nbr = ospf_hello->neighbors;
     while (attached_nbr != reinterpret_cast<in_addr_t *>(ospf_packet + ospf_hdr->length)) {
         if (*attached_nbr == inet_addr(THIS_ROUTER_ID)) {
@@ -111,19 +111,25 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
         attached_nbr++;
     }
     if (to_2way) {
+        // 邻居的Hello报文中包含自己，转换为2way状态
         nbr->event_2way_received();
     } else {
+        // 如果是Init状态，则无需操作
         nbr->event_1way_received();
         return;
     }
 
-    if (nbr->designated_router == nbr->ip_addr && nbr->backup_designated_router == 0x00000000 &&
+    if (nbr->designated_router == nbr->ip_addr && 
+        nbr->backup_designated_router == 0 &&
         intf->state == Interface::State::WAITING) {
+        // 如果邻居宣称自己是DR，且自己不是BDR
         intf->event_backup_seen();
     } else if ((prev_ndr == nbr->ip_addr) ^ (nbr->designated_router == nbr->ip_addr)) {
         intf->event_neighbor_change();
     }
-    if (nbr->backup_designated_router == nbr->ip_addr && intf->state == Interface::State::WAITING) {
+    if (nbr->backup_designated_router == nbr->ip_addr && 
+        intf->state == Interface::State::WAITING) {
+        // 如果邻居宣称自己是BDR
         intf->event_backup_seen();
     } else if ((prev_nbdr == nbr->ip_addr) ^ (nbr->backup_designated_router == nbr->ip_addr)) {
         intf->event_neighbor_change();
