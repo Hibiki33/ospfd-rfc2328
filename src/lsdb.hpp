@@ -11,15 +11,12 @@
 class Interface;
 
 class LSDB {
-private:
+public:
+    std::mutex mtx;
+
     std::vector<RouterLSA *> router_lsas;
-    std::mutex router_lsas_mutex;
-
     std::vector<NetworkLSA *> network_lsas;
-    std::mutex network_lsas_mutex;
-
     std::vector<SummaryLSA *> summary_lsas; // 事实上，在本实验中不会被使用
-    std::mutex summary_lsas_mutex;
 
     uint16_t max_age = 3600;     // max time an lsa can survive, default 3600s
     uint16_t max_age_diff = 900; // max time an lsa flood the AS, default 900s
@@ -44,3 +41,5 @@ public:
     void remove_lsa(uint32_t ls_id, uint32_t adv_rtr, LSA::Type type);
     void flood_lsa(LSA::Base *lsa, std::vector<Interface *>& sel_interfaces);
 };
+
+extern LSDB this_lsdb;

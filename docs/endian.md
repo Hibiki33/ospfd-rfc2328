@@ -4,7 +4,7 @@ x86架构的CPU是小端字节序，而网络协议是大端字节序。在发�
 
 ## 字节序转换函数
 
-在 `<netinet/in.h>` 中有4个函数，其中 **n** 值 **network**，**h** 值 **host**。
+在 `<netinet/in.h>` 中有4个函数，其中 **n** 指 **network**，**h** 指 **host**。
 
 ```c
 uint16_t htons(uint16_t netshort);

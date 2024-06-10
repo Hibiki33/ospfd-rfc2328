@@ -19,8 +19,7 @@
 
 std::vector<Interface *> this_interfaces;
 
-static const char *state_names[] = {"DOWN",    "LOOPBACK", "WAITING", "POINT2POINT",
-                                    "DROTHER", "BACKUP",   "DR"};
+static const char *state_names[] = {"DOWN", "LOOPBACK", "WAITING", "POINT2POINT", "DROTHER", "BACKUP", "DR"};
 
 void Interface::elect_designated_router() {
     // printf("\n\tStart electing DR and BDR...\n");
@@ -36,8 +35,7 @@ void Interface::elect_designated_router() {
     candidates.emplace_back(&self);
 
     for (auto& neighbor : neighbors) {
-        if (static_cast<uint8_t>(neighbor->state) >=
-                static_cast<uint8_t>(Neighbor::State::TWOWAY) &&
+        if (static_cast<uint8_t>(neighbor->state) >= static_cast<uint8_t>(Neighbor::State::TWOWAY) &&
             neighbor->priority != 0) {
             candidates.emplace_back(neighbor);
         }

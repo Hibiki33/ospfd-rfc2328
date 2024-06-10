@@ -5,8 +5,7 @@
 #include "neighbor.hpp"
 #include "utils.hpp"
 
-static const char *state_names[]{"DOWN",    "ATTEMPT",  "INIT",    "TWOWAY",
-                                 "EXSTART", "EXCHANGE", "LOADING", "FULL"};
+static const char *state_names[]{"DOWN", "ATTEMPT", "INIT", "TWOWAY", "EXSTART", "EXCHANGE", "LOADING", "FULL"};
 
 void Neighbor::event_hello_received() {
     // assert(state == State::DOWN || state == State::ATTEMPT || state == State::INIT);

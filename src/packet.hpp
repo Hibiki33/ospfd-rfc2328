@@ -195,9 +195,8 @@ struct Network : public Base {
 
     bool operator==(const Network& rhs) const {
         return header.link_state_id == rhs.header.link_state_id &&
-               header.advertising_router == rhs.header.advertising_router &&
-               header.length == rhs.header.length && network_mask == rhs.network_mask &&
-               attached_routers == rhs.attached_routers;
+               header.advertising_router == rhs.header.advertising_router && header.length == rhs.header.length &&
+               network_mask == rhs.network_mask && attached_routers == rhs.attached_routers;
     }
 };
 

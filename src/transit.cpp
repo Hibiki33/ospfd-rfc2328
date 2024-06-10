@@ -64,8 +64,8 @@ void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, I
     ospf_header->checksum = htons(crc_checksum(packet, packet_len));
 
     // 发送数据包
-    if (sendto(socket_fd, packet, packet_len, 0, reinterpret_cast<sockaddr *>(&dst_sockaddr),
-               sizeof(dst_sockaddr)) < 0) {
+    if (sendto(socket_fd, packet, packet_len, 0, reinterpret_cast<sockaddr *>(&dst_sockaddr), sizeof(dst_sockaddr)) <
+        0) {
         perror("send_packet: sendto");
     }
 
@@ -119,16 +119,14 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
         return;
     }
 
-    if (nbr->designated_router == nbr->ip_addr && 
-        nbr->backup_designated_router == 0 &&
+    if (nbr->designated_router == nbr->ip_addr && nbr->backup_designated_router == 0 &&
         intf->state == Interface::State::WAITING) {
         // 如果邻居宣称自己是DR，且自己不是BDR
         intf->event_backup_seen();
     } else if ((prev_ndr == nbr->ip_addr) ^ (nbr->designated_router == nbr->ip_addr)) {
         intf->event_neighbor_change();
     }
-    if (nbr->backup_designated_router == nbr->ip_addr && 
-        intf->state == Interface::State::WAITING) {
+    if (nbr->backup_designated_router == nbr->ip_addr && intf->state == Interface::State::WAITING) {
         // 如果邻居宣称自己是BDR
         intf->event_backup_seen();
     } else if ((prev_nbdr == nbr->ip_addr) ^ (nbr->backup_designated_router == nbr->ip_addr)) {
@@ -186,10 +184,9 @@ void recv_loop() {
         }
 
         // 查找接口
-        auto intf_it =
-            std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
-                return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS));
-            });
+        auto intf_it = std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
+            return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS));
+        });
         if (intf_it == this_interfaces.end()) {
             continue;
         }
@@ -264,8 +261,7 @@ void send_loop() {
                     nbr->rxmt_timer = 0;
 
                     // DD packet
-                    if (nbr->state == Neighbor::State::EXSTART ||
-                        nbr->state == Neighbor::State::EXCHANGE) {
+                    if (nbr->state == Neighbor::State::EXSTART || nbr->state == Neighbor::State::EXCHANGE) {
                         auto len = send_produce_dd(intf, data + sizeof(OSPF::Header), nbr);
                         send_packet(data, len, OSPF::Type::DD, nbr_ip, intf);
                         if (!nbr->is_master && nbr->state == Neighbor::State::EXCHANGE) {
@@ -274,8 +270,7 @@ void send_loop() {
                     }
 
                     // LSR packet
-                    if (nbr->state == Neighbor::State::LOADING ||
-                        nbr->state == Neighbor::State::EXCHANGE) {
+                    if (nbr->state == Neighbor::State::LOADING || nbr->state == Neighbor::State::EXCHANGE) {
                     }
                 }
             }

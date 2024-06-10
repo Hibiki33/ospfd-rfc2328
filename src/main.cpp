@@ -14,6 +14,7 @@
 
 #include "interface.hpp"
 #include "packet.hpp"
+#include "route.hpp"
 #include "transit.hpp"
 #include "utils.hpp"
 
@@ -75,8 +76,7 @@ void ospf_daemon() {
         exit(EXIT_FAILURE);
     }
 
-    int log_fd = open("/tmp/ospf_daemon.log", O_RDWR | O_CREAT | O_APPEND,
-                      S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    int log_fd = open("/tmp/ospf_daemon.log", O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (log_fd < 0) {
         exit(EXIT_FAILURE);
     }
