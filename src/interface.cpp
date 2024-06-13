@@ -268,11 +268,15 @@ void init_interfaces() {
         ifreq socket_ifr;
         if ((socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_OSPF)) < 0) {
             perror("send socket_fd init");
+            delete intf;
+            continue;
         }
         memset(&socket_ifr, 0, sizeof(ifreq));
         strcpy(socket_ifr.ifr_name, intf->name);
         if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &socket_ifr, sizeof(ifreq)) < 0) {
             perror("send_loop: setsockopt");
+            delete intf;
+            continue;
         }
         intf->send_fd = socket_fd;
 
