@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <net/if.h>
+#include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -30,6 +31,16 @@ int main(int argc, char *argv[]) {
 
     // init interfaces
     init_interfaces();
+    
+    if (daemon) {
+        // run as daemon
+        std::thread daemon_thread(ospf_daemon);
+        daemon_thread.detach();
+    } else {
+        // run normally
+        ospf_run();
+    }
+
     // turn off promisc mode
     for (auto intf : this_interfaces) {
         ifreq ifr;
@@ -39,16 +50,6 @@ int main(int argc, char *argv[]) {
         ifr.ifr_flags &= ~IFF_PROMISC;
         ioctl(fd, SIOCSIFFLAGS, &ifr);
         close(fd);
-    }
-    exit(0);
-
-    if (daemon) {
-        // run as daemon
-        std::thread daemon_thread(ospf_daemon);
-        daemon_thread.detach();
-    } else {
-        // run normally
-        ospf_run();
     }
 
     return 0;
@@ -105,6 +106,12 @@ void ospf_run() {
     std::cout << "OSPF send/recv started." << std::endl;
 
     OSPF::running = true;
+
+    // alloc recv fd
+    if ((OSPF::recv_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP))) < 0) {
+        perror("recv socket_fd init");
+    }
+
     std::thread send_thread(OSPF::send_loop);
     std::thread recv_thread(OSPF::recv_loop);
 

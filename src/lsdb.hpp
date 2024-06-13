@@ -12,7 +12,7 @@ class Interface;
 
 class LSDB {
 public:
-    std::mutex mtx;
+    std::mutex mtx; // 锁，防止发送和接收线程同时访问LSDB
 
     std::vector<RouterLSA *> router_lsas;
     std::vector<NetworkLSA *> network_lsas;

@@ -9,10 +9,9 @@ class Interface;
 
 namespace OSPF {
 
-void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, Interface *intf);
+extern int recv_fd;
 
 void recv_loop();
-
 void send_loop();
 
 extern std::atomic<bool> running;

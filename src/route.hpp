@@ -74,8 +74,10 @@ private:
     // 每个结点的出边，其中网络结点不应有出边
     std::unordered_map<in_addr_t, std::vector<Edge>> edges;
 
-    void update_route() noexcept;
     void dijkstra() noexcept;
+
+public:
+    void update_route() noexcept;
 };
 
 extern RoutingTable this_routing_table;

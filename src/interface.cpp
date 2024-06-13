@@ -263,6 +263,19 @@ void init_interfaces() {
             continue;
         }
 
+        // alloc send fd
+        int socket_fd;
+        ifreq socket_ifr;
+        if ((socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_OSPF)) < 0) {
+            perror("send socket_fd init");
+        }
+        memset(&socket_ifr, 0, sizeof(ifreq));
+        strcpy(socket_ifr.ifr_name, intf->name);
+        if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &socket_ifr, sizeof(ifreq)) < 0) {
+            perror("send_loop: setsockopt");
+        }
+        intf->send_fd = socket_fd;
+
         // add to interfaces
         this_interfaces.push_back(intf);
     }
@@ -285,4 +298,7 @@ Interface::~Interface() {
     for (auto& neighbor : neighbors) {
         delete neighbor;
     }
+
+    // close send fd
+    close(send_fd);
 }

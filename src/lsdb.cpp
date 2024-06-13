@@ -103,7 +103,7 @@ void LSDB::flood_lsa(LSA::Base *lsa, std::vector<Interface *>& sel_interfaces) {
         if (interface->state == Interface::State::DROTHER || interface->state == Interface::State::BACKUP ||
             interface->state == Interface::State::POINT2POINT) {
             // TODO: 目的ip完善
-            send_packet(data, sizeof(OSPF::LSU) + lsa->size(), OSPF::Type::LSU, 0, interface);
+            // send_packet(data, sizeof(OSPF::LSU) + lsa->size(), OSPF::Type::LSU, 0, interface);
         }
     }
 }

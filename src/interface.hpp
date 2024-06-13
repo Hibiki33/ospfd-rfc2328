@@ -95,6 +95,11 @@ public:
     // void clear_neighbors();
     // Neighbor *get_neighbor(in_addr_t ip_addr);
 
+public:
+    /* 发送的fd，不在构造函数中初始化，避免抛出异常 */
+    int send_fd;
+
+public:
     Interface() = default;
     Interface(in_addr_t ip_addr, in_addr_t mask, uint32_t area_id) : ip_addr(ip_addr), mask(mask), area_id(area_id) {
     }

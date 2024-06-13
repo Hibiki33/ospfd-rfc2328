@@ -18,59 +18,7 @@
 namespace OSPF {
 
 std::atomic<bool> running;
-
-// 发送IP包，包含OSPF报文
-void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, Interface *intf) {
-    // 创建一个socket
-    auto socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_OSPF);
-    if (socket_fd < 0) {
-        perror("send_packet: socket_fd init");
-    }
-
-    // 将socket绑定到指定的接口
-    ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, THIS_ROUTER_NAME);
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0) {
-        perror("send_packet: setsockopt");
-    }
-
-    // 构造目标地址
-    sockaddr_in dst_sockaddr;
-    memset(&dst_sockaddr, 0, sizeof(dst_sockaddr));
-    dst_sockaddr.sin_family = AF_INET;
-    dst_sockaddr.sin_addr.s_addr = htonl(dst);
-
-    // 构造发送数据包
-    char packet[ETH_DATA_LEN];
-    auto packet_len = sizeof(OSPF::Header) + len;
-
-    // 构造OSPF头部
-    auto ospf_header = reinterpret_cast<OSPF::Header *>(packet);
-    ospf_header->version = OSPF_VERSION;
-    ospf_header->type = type;
-    ospf_header->length = packet_len;
-    ospf_header->router_id = ntohl(inet_addr(THIS_ROUTER_ID));
-    ospf_header->area_id = intf->area_id;
-    ospf_header->checksum = 0;
-    ospf_header->auth_type = 0;
-    ospf_header->auth = 0;
-    ospf_header->host_to_network();
-
-    // 拷贝数据
-    memcpy(packet + sizeof(OSPF::Header), data, len);
-
-    // 计算校验和
-    ospf_header->checksum = htons(crc_checksum(packet, packet_len));
-
-    // 发送数据包
-    if (sendto(socket_fd, packet, packet_len, 0, reinterpret_cast<sockaddr *>(&dst_sockaddr), sizeof(dst_sockaddr)) <
-        0) {
-        perror("send_packet: sendto");
-    }
-
-    close(socket_fd);
-}
+int recv_fd;
 
 static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
@@ -140,29 +88,16 @@ static void recv_process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip
 }
 
 void recv_loop() {
-    // 创建一个socket
-    auto socket_fd = socket(AF_INET, SOCK_RAW, htons(ETH_P_ALL));
-    if (socket_fd < 0) {
-        perror("recv_loop: socket_fd init");
-    }
-
-    // 将socket绑定到指定的接口
-    ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, THIS_ROUTER_NAME);
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0) {
-        perror("recv_loop: setsockopt");
-    }
-
     iphdr *ip_hdr;
     Interface *intf;
     char recv_frame[ETH_FRAME_LEN];
     auto recv_packet = recv_frame + sizeof(ethhdr);
     while (running) {
         memset(recv_frame, 0, ETH_FRAME_LEN);
-        auto recv_size = recv(socket_fd, recv_frame, ETH_FRAME_LEN, 0);
-        if (recv_size < 0) {
-            perror("recv_loop: recv");
+        // auto recv_size = recv(recv_fd, recv_frame, ETH_FRAME_LEN, 0);
+        auto recv_size = recvfrom(recv_fd, recv_frame, ETH_FRAME_LEN, 0, nullptr, nullptr);
+        if (recv_size < sizeof(iphdr)) {
+            perror("recv_loop: not receive enough data");
         }
 
         // 解析IP头部
@@ -207,6 +142,43 @@ void recv_loop() {
         default:
             break;
         }
+    }
+}
+
+// 发送IP包，包含OSPF报文
+static void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, Interface *intf) {
+    // 构造目标地址
+    sockaddr_in dst_sockaddr;
+    memset(&dst_sockaddr, 0, sizeof(dst_sockaddr));
+    dst_sockaddr.sin_family = AF_INET;
+    dst_sockaddr.sin_addr.s_addr = htonl(dst);
+
+    // 构造发送数据包
+    char packet[ETH_DATA_LEN];
+    auto packet_len = sizeof(OSPF::Header) + len;
+
+    // 构造OSPF头部
+    auto ospf_header = reinterpret_cast<OSPF::Header *>(packet);
+    ospf_header->version = OSPF_VERSION;
+    ospf_header->type = type;
+    ospf_header->length = packet_len;
+    ospf_header->router_id = ntohl(inet_addr(THIS_ROUTER_ID));
+    ospf_header->area_id = intf->area_id;
+    ospf_header->checksum = 0;
+    ospf_header->auth_type = 0;
+    ospf_header->auth = 0;
+    ospf_header->host_to_network();
+
+    // 拷贝数据
+    memcpy(packet + sizeof(OSPF::Header), data, len);
+
+    // 计算校验和
+    ospf_header->checksum = htons(crc_checksum(packet, packet_len));
+
+    // 发送数据包
+    if (sendto(intf->send_fd, packet, packet_len, 0, reinterpret_cast<sockaddr *>(&dst_sockaddr), 
+        sizeof(dst_sockaddr)) < 0) {
+        perror("send_packet: sendto");
     }
 }
 

@@ -201,10 +201,43 @@ struct Network : public Base {
 };
 
 /* Summary-LSA structure. */
-struct Summary {
-    Header header;
+struct Summary : public Base {
     in_addr_t network_mask;
     uint32_t metric;
+
+    Summary(char *net_ptr) {
+        /* Parse the header. */
+        header = *reinterpret_cast<Header *>(net_ptr);
+        header.network_to_host();
+        /* Parse the summary-LSA Data. */
+        net_ptr += sizeof(Header);
+        network_mask = ntohl(*reinterpret_cast<in_addr_t *>(net_ptr));
+        net_ptr += sizeof(network_mask);
+        metric = ntohl(*reinterpret_cast<uint32_t *>(net_ptr));
+    }
+
+    size_t size() const override {
+        return sizeof(Header) + sizeof(network_mask) + sizeof(metric);
+    }
+
+    void to_packet(char *packet) const override {
+        /* Initialize the packet. */
+        // auto packet = new char[size()];
+
+        /* Copy the header. */
+        auto header_net = header;
+        header_net.host_to_network();
+        memcpy(packet, &header_net, sizeof(Header));
+
+        /* Copy the summary-LSA Data. */
+        auto net_ptr = packet + sizeof(Header);
+        *reinterpret_cast<in_addr_t *>(net_ptr) = htonl(network_mask);
+        net_ptr += sizeof(in_addr_t);
+        *reinterpret_cast<uint32_t *>(net_ptr) = htonl(metric);
+        reinterpret_cast<Header *>(packet)->checksum =
+            htons(fletcher_checksum(packet + 2, header.length - 2, offsetof(Header, checksum)));
+        // return packet;
+    }
 };
 
 /* ASBR-summary-LSA structure. */
