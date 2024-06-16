@@ -1,19 +1,22 @@
 #include <algorithm>
-#include <arpa/inet.h>
 #include <cstddef>
 #include <cstring>
+#include <cassert>
 #include <iostream>
+#include <thread>
+
+#include <unistd.h>
+#include <arpa/inet.h>
 #include <net/if.h>
 #include <netinet/if_ether.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <sys/socket.h>
-#include <thread>
-#include <unistd.h>
 
 #include "interface.hpp"
 #include "neighbor.hpp"
 #include "transit.hpp"
+#include "lsdb.hpp"
 
 namespace OSPF {
 
@@ -80,8 +83,43 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
 }
 
 static void recv_process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
+    auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
     auto ospf_dd = reinterpret_cast<OSPF::DD *>(ospf_packet + sizeof(OSPF::Header));
-    // auto nbr = intf->get_neighbor(src_ip);
+    Neighbor *nbr = intf->get_neighbor_by_ip(src_ip);
+    assert(nbr != nullptr);
+
+    ospf_hdr->network_to_host();
+    ospf_dd->network_to_host();
+
+recv_dd_nbr_state_switch:
+    switch (nbr->state) {
+    case Neighbor::State::DOWN:
+    case Neighbor::State::ATTEMPT:
+    case Neighbor::State::TWOWAY:
+        return;
+    case Neighbor::State::INIT:
+        if (ospf_dd->flags & DD_FLAG_I) {
+            nbr->event_2way_received();
+        }
+        // 需要根据新的状态重新进入switch
+        goto recv_dd_nbr_state_switch;
+    case Neighbor::State::EXSTART:
+        if (ospf_dd->flags & DD_FLAG_ALL &&
+            nbr->id > ntohl(inet_addr(THIS_ROUTER_ID))) {
+            nbr->is_master = true;
+            nbr->dd_seq_num = ospf_dd->sequence_number;
+        } else if (!(ospf_dd->flags & DD_FLAG_MS) &&
+                   !(ospf_dd->flags & DD_FLAG_I) &&
+                    ospf_dd->sequence_number == nbr->dd_seq_num &&
+                    nbr->id < ntohl(inet_addr(THIS_ROUTER_ID))) {
+            nbr->is_master = false;
+        }
+        nbr->event_negotiation_done();
+        break;
+    default:
+        break;
+    }
+
 }
 
 void recv_loop() {
@@ -129,6 +167,7 @@ void recv_loop() {
             recv_process_hello(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::DD:
+            recv_process_dd(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSR:
             break;
@@ -198,7 +237,23 @@ static size_t send_produce_hello(Interface *intf, char *body) {
 }
 
 static size_t send_produce_dd(Interface *intf, char *body, Neighbor *nbr) {
-    return 0;
+    auto dd = reinterpret_cast<OSPF::DD *>(body);
+    dd->interface_mtu = ETH_DATA_LEN;
+    dd->options = 0x02;
+    dd->sequence_number = nbr->dd_seq_num;
+    dd->flags = 0;
+    if (nbr->is_master) {
+        dd->flags |= DD_FLAG_MS;
+    }
+    
+    if (nbr->state == Neighbor::State::EXSTART) {
+        dd->flags |= DD_FLAG_I | DD_FLAG_M;
+        dd->host_to_network(0);
+        return sizeof(OSPF::DD);
+    } else {
+        dd->host_to_network(this_lsdb.lsa_num());
+        return sizeof(OSPF::DD) + sizeof(LSA::Header) * this_lsdb.lsa_num();
+    }
 }
 
 void send_loop() {
@@ -227,7 +282,10 @@ void send_loop() {
                     nbr->rxmt_timer = 0;
 
                     // DD packet
-                    if (nbr->state == Neighbor::State::EXSTART || nbr->state == Neighbor::State::EXCHANGE) {
+                    if (// Exstart状态，发送空的DD包
+                        nbr->state == Neighbor::State::EXSTART || 
+                        // Exchange状态，发送DD包
+                        nbr->state == Neighbor::State::EXCHANGE) {
                         auto len = send_produce_dd(intf, data + sizeof(OSPF::Header), nbr);
                         send_packet(intf, data, len, OSPF::Type::DD, nbr_ip);
                         if (!nbr->is_master && nbr->state == Neighbor::State::EXCHANGE) {

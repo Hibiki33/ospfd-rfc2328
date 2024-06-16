@@ -325,6 +325,16 @@ struct Hello {
             neighbors[i] = htonl(neighbors[i]);
         }
     }
+
+    /* Convert network to host byte order. */
+    void network_to_host() noexcept {
+        network_mask = ntohl(network_mask);
+        hello_interval = ntohs(hello_interval);
+        router_dead_interval = ntohl(router_dead_interval);
+        designated_router = ntohl(designated_router);
+        backup_designated_router = ntohl(backup_designated_router);
+        // 不转换neighbors
+    }
 } __attribute__((packed));
 
 /* OSPF database description packet structure. */
@@ -332,8 +342,26 @@ struct DD {
     uint16_t interface_mtu;
     uint8_t options;
     uint8_t flags;
+#define DD_FLAG_MS 0x01
+#define DD_FLAG_M 0x02
+#define DD_FLAG_I 0x04
+#define DD_FLAG_ALL DD_FLAG_MS | DD_FLAG_M | DD_FLAG_I
     uint32_t sequence_number;
     LSA::Header lsahdrs[0];
+
+    void host_to_network(size_t lsahdrs_num) noexcept {
+        interface_mtu = htons(interface_mtu);
+        sequence_number = htonl(sequence_number);
+        for (auto i = 0; i < lsahdrs_num; ++i) {
+            lsahdrs[i].host_to_network();
+        }
+    }
+
+    void network_to_host() noexcept {
+        interface_mtu = ntohs(interface_mtu);
+        sequence_number = ntohl(sequence_number);
+        // 不转换lsahdrs
+    }
 } __attribute__((packed));
 
 /* OSPF link state request packet structure. */
