@@ -15,6 +15,7 @@
 
 #include "interface.hpp"
 #include "neighbor.hpp"
+#include "transit.hpp"
 #include "utils.hpp"
 
 std::vector<Interface *> this_interfaces;
@@ -79,16 +80,34 @@ void Interface::elect_designated_router() {
     }
     if (!dr_candidates.empty()) {
         dr = *std::max_element(dr_candidates.begin(), dr_candidates.end(), neighbor_cmp);
-    } // must be not empty
+    } else {
+        dr = bdr; // emmm...
+    }
+
+    auto old_dr = designated_router;
+    auto old_bdr = backup_designated_router;
 
     designated_router = dr->ip_addr;
     backup_designated_router = bdr->ip_addr;
+    // designated_router = dr->id;
+    // backup_designated_router = bdr->id;
+
+    // If DR/BDR changed
+    if (dr->ip_addr != designated_router || bdr->ip_addr != backup_designated_router) {
+        for (auto& neighbor : neighbors) {
+            // rfc2328中说，一旦DR/BDR改变
+            // 就要检查是否需要建立(2-way->exstart)/维持(any->2-way)邻接
+            if (neighbor->state >= Neighbor::State::TWOWAY) {
+                neighbor->event_adj_ok();
+            }
+        }
+    }
 
     // printf("\tnew DR: %x\n", designated_router);
     // printf("\tnew BDR: %x\n", backup_designated_router);
     // printf("Electing finished.\n");
-    std::cout << "\tnew DR: " << ip_to_string(designated_router) << std::endl;
-    std::cout << "\tnew BDR: " << ip_to_string(backup_designated_router) << std::endl;
+    std::cout << "\tnew DR: " << ip_to_str(designated_router) << std::endl;
+    std::cout << "\tnew BDR: " << ip_to_str(backup_designated_router) << std::endl;
     std::cout << "Electing finished." << std::endl;
 }
 
@@ -96,7 +115,7 @@ void Interface::elect_designated_router() {
 // BROADCAST/NBMA : State::DOWN -> State::WAITING
 void Interface::event_interface_up() {
     assert(state == State::DOWN);
-    std::cout << "Interface " << ip_to_string(ip_addr) << " received interface_up:"
+    std::cout << "Interface " << ip_to_str(ip_addr) << " received interface_up:"
               << "\tstate " << state_names[(int)state] << " -> ";
     switch (type) {
     case Type::P2P:
@@ -118,7 +137,7 @@ void Interface::event_interface_up() {
 void Interface::event_wait_timer() {
     assert(state == State::WAITING);
     elect_designated_router();
-    std::cout << "Interface " << ip_to_string(ip_addr) << " received wait_timer:"
+    std::cout << "Interface " << ip_to_str(ip_addr) << " received wait_timer:"
               << "\tstate " << state_names[(int)state] << " -> ";
     if (ip_addr == designated_router) {
         state = State::DR;
@@ -133,7 +152,7 @@ void Interface::event_wait_timer() {
 void Interface::event_backup_seen() {
     assert(state == State::WAITING);
     elect_designated_router();
-    std::cout << "Interface " << ip_to_string(ip_addr) << " received backup_seen:"
+    std::cout << "Interface " << ip_to_str(ip_addr) << " received backup_seen:"
               << "\tstate " << state_names[(int)state] << " -> ";
     if (ip_addr == designated_router) {
         state = State::DR;
@@ -148,7 +167,7 @@ void Interface::event_backup_seen() {
 void Interface::event_neighbor_change() {
     assert(state == State::DR || state == State::BACKUP || state == State::DROTHER);
     elect_designated_router();
-    std::cout << "Interface " << ip_to_string(ip_addr) << " received neighbor_change:"
+    std::cout << "Interface " << ip_to_str(ip_addr) << " received neighbor_change:"
               << "\tstate " << state_names[(int)state] << " -> ";
     if (ip_addr == designated_router) {
         state = State::DR;
@@ -162,7 +181,7 @@ void Interface::event_neighbor_change() {
 
 // Any -> State::LOOPBACK
 void Interface::event_loop_ind() {
-    std::cout << "Interface " << ip_to_string(ip_addr) << " received loop_ind:"
+    std::cout << "Interface " << ip_to_str(ip_addr) << " received loop_ind:"
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::LOOPBACK;
     std::cout << state_names[(int)state] << std::endl;
@@ -175,39 +194,29 @@ void Interface::event_unloop_ind() {
 
 // Any -> State::DOWN
 void Interface::event_interface_down() {
-    std::cout << "Interface " << ip_to_string(ip_addr) << " received interface_down:"
+    std::cout << "Interface " << ip_to_str(ip_addr) << " received interface_down:"
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
     std::cout << state_names[(int)state] << std::endl;
 }
 
-// Neighbor *Interface::add_neighbor(in_addr_t ip) {
-//     if (neighbors.find(ip) == neighbors.end()) {
-//         neighbors[ip] = new Neighbor(ip, this);
-//     }
-//     return neighbors[ip];
-// }
+Neighbor *Interface::get_neighbor_by_id(in_addr_t id) {
+    for (auto& neighbor : neighbors) {
+        if (neighbor->id == id) {
+            return neighbor;
+        }
+    }
+    return nullptr;
+}
 
-// void Interface::remove_neighbor(in_addr_t ip) {
-//     if (neighbors.find(ip) != neighbors.end()) {
-//         delete neighbors[ip];
-//         neighbors.erase(ip);
-//     }
-// }
-
-// void Interface::clear_neighbors() {
-//     for (auto& neighbor : neighbors) {
-//         delete neighbor.second;
-//     }
-//     neighbors.clear();
-// }
-
-// Neighbor *Interface::get_neighbor(in_addr_t ip) {
-//     if (neighbors.find(ip) == neighbors.end()) {
-//         return nullptr;
-//     }
-//     return neighbors[ip];
-// }
+Neighbor *Interface::get_neighbor_by_ip(in_addr_t ip) {
+    for (auto& neighbor : neighbors) {
+        if (neighbor->ip_addr == ip) {
+            return neighbor;
+        }
+    }
+    return nullptr;
+}
 
 void init_interfaces() {
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -289,8 +298,8 @@ void init_interfaces() {
     std::cout << "Found " << this_interfaces.size() << " interfaces." << std::endl;
     for (auto intf : this_interfaces) {
         std::cout << "Interface " << intf->name << ":" << std::endl
-                  << "\tip addr:" << ip_to_string(intf->ip_addr) << std::endl
-                  << "\tmask:" << ip_to_string(intf->mask) << std::endl;
+                  << "\tip addr:" << ip_to_str(intf->ip_addr) << std::endl
+                  << "\tmask:" << ip_to_str(intf->mask) << std::endl;
         intf->hello_timer = 0;
         intf->wait_timer = 0;
         intf->event_interface_up();

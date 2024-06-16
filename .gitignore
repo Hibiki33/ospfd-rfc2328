@@ -7,3 +7,6 @@ build/
 
 # Vscode Config
 .vscode/
+
+# Log
+*.log

@@ -263,10 +263,6 @@ using ASExternalLSA = LSA::ASExternal;
 
 namespace OSPF {
 
-#ifndef IPPROTO_OSPF
-#define IPPROTO_OSPF 89
-#endif
-
 /* OSPF packet types. */
 enum struct Type : uint8_t {
     HELLO = 1,
@@ -320,6 +316,7 @@ struct Hello {
 
     /* Convert host to network byte order. */
     void host_to_network(size_t nbr_num) noexcept {
+        network_mask = htonl(network_mask);
         hello_interval = htons(hello_interval);
         router_dead_interval = htonl(router_dead_interval);
         designated_router = htonl(designated_router);

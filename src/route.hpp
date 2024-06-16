@@ -41,6 +41,7 @@ public:
 
     std::pair<in_addr_t, Interface *> lookup_route(in_addr_t dst, in_addr_t mask) const noexcept;
     void print() const noexcept;
+    void debug(std::ostream& os) const noexcept;
 
 private:
     struct Node {

@@ -56,17 +56,17 @@ public:
     uint8_t router_priority = 1;
 
     /* Hello计时器 */
-    uint32_t hello_timer;
+    uint32_t hello_timer = 0;
     /* Wait计时器 */
-    uint32_t wait_timer;
+    uint32_t wait_timer = 0;
 
     /* 该接口的邻接路由器 */
     std::list<Neighbor *> neighbors;
 
     /* 选举出的DR */
-    in_addr_t designated_router;
+    in_addr_t designated_router = 0;
     /* 选举出的BDR */
-    in_addr_t backup_designated_router;
+    in_addr_t backup_designated_router = 0;
 
     /* 接口输出值，即在Router-LSA中宣告的连接状态距离值 */
     uint32_t cost = 1;
@@ -89,11 +89,8 @@ public:
     void event_unloop_ind();
     void event_interface_down();
 
-    /* 管理邻居 */
-    // Neighbor *add_neighbor(in_addr_t ip_addr);
-    // void remove_neighbor(in_addr_t ip_addr);
-    // void clear_neighbors();
-    // Neighbor *get_neighbor(in_addr_t ip_addr);
+    Neighbor *get_neighbor_by_id(in_addr_t id);
+    Neighbor *get_neighbor_by_ip(in_addr_t ip);
 
 public:
     /* 发送的fd，不在构造函数中初始化，避免抛出异常 */

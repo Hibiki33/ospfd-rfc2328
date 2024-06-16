@@ -11,6 +11,10 @@ namespace OSPF {
 
 extern int recv_fd;
 
+#ifndef IPPROTO_OSPF
+#define IPPROTO_OSPF 89
+#endif
+
 void recv_loop();
 void send_loop();
 

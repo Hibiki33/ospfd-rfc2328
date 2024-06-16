@@ -1,5 +1,6 @@
 #include <chrono>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <thread>
 
@@ -31,7 +32,7 @@ int main(int argc, char *argv[]) {
 
     // init interfaces
     init_interfaces();
-    
+
     if (daemon) {
         // run as daemon
         std::thread daemon_thread(ospf_daemon);
@@ -121,6 +122,11 @@ void ospf_run() {
         if (cmd == "exit") {
             OSPF::running = false;
             break;
+        }
+        if (cmd == "debug") {
+            std::ofstream debug_log("./debug.log", std::ios::trunc);
+            this_routing_table.debug(debug_log);
+            this_routing_table.debug(std::cout);
         }
     }
 

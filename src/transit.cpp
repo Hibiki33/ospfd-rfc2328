@@ -27,13 +27,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
     // if (nbr == nullptr) {
     //     nbr = intf->add_neighbor(src_ip);
     // }
-    Neighbor *nbr = nullptr;
-    for (auto& neighbor : intf->neighbors) {
-        if (neighbor->ip_addr == src_ip) {
-            nbr = neighbor;
-            break;
-        }
-    }
+    Neighbor *nbr = intf->get_neighbor_by_ip(src_ip);
     if (nbr == nullptr) {
         nbr = new Neighbor(src_ip, intf);
         intf->neighbors.push_back(nbr);
@@ -59,11 +53,14 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
         attached_nbr++;
     }
     if (to_2way) {
-        // 邻居的Hello报文中包含自己，转换为2way状态
+        // 邻居的Hello报文中包含自己，触发2way事件
+        // 如果在这里需要建立邻接，邻接会直接进入exstart状态
+        // 否则会进入并维持在2way状态，等待adj_ok事件
         nbr->event_2way_received();
     } else {
-        // 如果是Init状态，则无需操作
-        nbr->event_1way_received();
+        if (nbr->state != Neighbor::State::INIT) {
+            nbr->event_1way_received();
+        }
         return;
     }
 
@@ -146,7 +143,7 @@ void recv_loop() {
 }
 
 // 发送IP包，包含OSPF报文
-static void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t dst, Interface *intf) {
+static void send_packet(Interface *intf, char *packet, size_t len, OSPF::Type type, in_addr_t dst) {
     // 构造目标地址
     sockaddr_in dst_sockaddr;
     memset(&dst_sockaddr, 0, sizeof(dst_sockaddr));
@@ -154,7 +151,6 @@ static void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t
     dst_sockaddr.sin_addr.s_addr = htonl(dst);
 
     // 构造发送数据包
-    char packet[ETH_DATA_LEN];
     auto packet_len = sizeof(OSPF::Header) + len;
 
     // 构造OSPF头部
@@ -169,15 +165,13 @@ static void send_packet(const char *data, size_t len, OSPF::Type type, in_addr_t
     ospf_header->auth = 0;
     ospf_header->host_to_network();
 
-    // 拷贝数据
-    memcpy(packet + sizeof(OSPF::Header), data, len);
-
     // 计算校验和
-    ospf_header->checksum = htons(crc_checksum(packet, packet_len));
+    // 这里不需要转换为网络字节序，因为本来就是按网络字节序计算的
+    ospf_header->checksum = crc_checksum(packet, packet_len);
 
     // 发送数据包
-    if (sendto(intf->send_fd, packet, packet_len, 0, reinterpret_cast<sockaddr *>(&dst_sockaddr), 
-        sizeof(dst_sockaddr)) < 0) {
+    if (sendto(intf->send_fd, packet, packet_len, 0, reinterpret_cast<sockaddr *>(&dst_sockaddr),
+               sizeof(dst_sockaddr)) < 0) {
         perror("send_packet: sendto");
     }
 }
@@ -219,7 +213,7 @@ void send_loop() {
             if ((++intf->hello_timer) >= intf->hello_interval) {
                 intf->hello_timer = 0;
                 auto len = send_produce_hello(intf, data + sizeof(OSPF::Header));
-                send_packet(data, len, OSPF::Type::HELLO, ntohl(inet_addr(ALL_SPF_ROUTERS)), intf);
+                send_packet(intf, data, len, OSPF::Type::HELLO, ntohl(inet_addr(ALL_SPF_ROUTERS)));
             }
 
             // For each neighbor
@@ -235,7 +229,7 @@ void send_loop() {
                     // DD packet
                     if (nbr->state == Neighbor::State::EXSTART || nbr->state == Neighbor::State::EXCHANGE) {
                         auto len = send_produce_dd(intf, data + sizeof(OSPF::Header), nbr);
-                        send_packet(data, len, OSPF::Type::DD, nbr_ip, intf);
+                        send_packet(intf, data, len, OSPF::Type::DD, nbr_ip);
                         if (!nbr->is_master && nbr->state == Neighbor::State::EXCHANGE) {
                             nbr->event_exchange_done();
                         }

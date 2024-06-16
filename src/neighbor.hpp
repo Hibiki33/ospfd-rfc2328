@@ -87,4 +87,7 @@ public:
     void event_kill_nbr();
     void event_inactivity_timer();
     void event_ll_down();
+
+private:
+    bool estab_adj() noexcept;
 };

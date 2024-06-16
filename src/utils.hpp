@@ -93,9 +93,15 @@ static inline uint64_t ntohll(uint64_t value) noexcept {
 }
 #endif
 
-static inline std::string ip_to_string(uint32_t ip) noexcept {
+/* 将宿主机字节序的IP地址转换字符串 */
+static inline std::string ip_to_str(uint32_t ip) noexcept {
     char buf[INET_ADDRSTRLEN];
     uint32_t ip_network_order = htonl(ip);
     inet_ntop(AF_INET, &ip_network_order, buf, INET_ADDRSTRLEN);
     return std::string(buf);
+}
+
+/* 将二进制位掩码转换为掩码位数 */
+static inline uint32_t mask_to_num(uint32_t mask) noexcept {
+    return 32 - __builtin_ctz(mask);
 }

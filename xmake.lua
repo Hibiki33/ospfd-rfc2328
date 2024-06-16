@@ -13,7 +13,7 @@ target("ospf")
     add_defines(
         "OSPF_VERSION=2",
         "THIS_ROUTER_NAME=\"R0\"",
-        "THIS_ROUTER_ID=\"0.0.0.0\""
+        "THIS_ROUTER_ID=\"1.1.1.1\""
     )
 
 task("fix-style")

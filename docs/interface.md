@@ -68,8 +68,8 @@ void init_interfaces() {
     std::cout << "Found " << this_interfaces.size() << " interfaces." << std::endl;
     for (auto intf : this_interfaces) {
         std::cout << "Interface " << intf->name << ":" << std::endl
-                  << "\tip addr:" << ip_to_string(intf->ip_addr) << std::endl
-                  << "\tmask:" << ip_to_string(intf->mask) << std::endl;
+                  << "\tip addr:" << ip_to_str(intf->ip_addr) << std::endl
+                  << "\tmask:" << ip_to_str(intf->mask) << std::endl;
         intf->hello_timer = 0;
         intf->wait_timer = 0;
         intf->event_interface_up();
@@ -80,3 +80,7 @@ void init_interfaces() {
 需要注意的是，要从读出的接口中去除本地回环接口。
 
 最后需要将所有接口的计时器清空，并触发interface_up事件改变接口状态。
+
+## 选举
+
+比较神奇的是，无论是接口数据结构、邻接数据结构或是Hello包中，**DR和BDR字段记录的都是关联接口的IP地址**，而不是路由器ID。

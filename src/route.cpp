@@ -31,9 +31,17 @@ std::pair<in_addr_t, Interface *> RoutingTable::lookup_route(in_addr_t dst, in_a
 void RoutingTable::print() const noexcept {
     printf("%-15s%-15s%-15s%-15s%-15s\n", "Destination", "Mask", "Next Hop", "Metric", "Interface");
     for (const auto& route : routes) {
-        printf("%-15s%-15s%-15s%-15u%-15s\n", ip_to_string(route.dst).data(), ip_to_string(route.mask).data(),
-               ip_to_string(route.next_hop).data(), route.metric,
-               strlen(route.intf->name) > 0 ? route.intf->name : ip_to_string(route.intf->ip_addr).data());
+        printf("%-15s%-15s%-15s%-15u%-15s\n", ip_to_str(route.dst).data(), ip_to_str(route.mask).data(),
+               ip_to_str(route.next_hop).data(), route.metric,
+               strlen(route.intf->name) > 0 ? route.intf->name : ip_to_str(route.intf->ip_addr).data());
+    }
+}
+
+void RoutingTable::debug(std::ostream& os) const noexcept {
+    os << "routing table:" << std::endl;
+    for (const auto& route : routes) {
+        os << ip_to_str(route.dst) << "/" << mask_to_num(route.mask) << " via " << ip_to_str(route.next_hop)
+           << " metric " << route.metric << " on " << route.intf->name << std::endl;
     }
 }
 
