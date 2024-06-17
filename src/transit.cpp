@@ -1,22 +1,22 @@
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstring>
-#include <cassert>
 #include <iostream>
 #include <thread>
 
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netinet/if_ether.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include "interface.hpp"
+#include "lsdb.hpp"
 #include "neighbor.hpp"
 #include "transit.hpp"
-#include "lsdb.hpp"
 
 namespace OSPF {
 
@@ -61,9 +61,7 @@ static void recv_process_hello(Interface *intf, char *ospf_packet, in_addr_t src
         // 否则会进入并维持在2way状态，等待adj_ok事件
         nbr->event_2way_received();
     } else {
-        if (nbr->state != Neighbor::State::INIT) {
-            nbr->event_1way_received();
-        }
+        nbr->event_1way_received();
         return;
     }
 
@@ -104,22 +102,91 @@ recv_dd_nbr_state_switch:
         // 需要根据新的状态重新进入switch
         goto recv_dd_nbr_state_switch;
     case Neighbor::State::EXSTART:
-        if (ospf_dd->flags & DD_FLAG_ALL &&
-            nbr->id > ntohl(inet_addr(THIS_ROUTER_ID))) {
+        nbr->dd_options = ospf_dd->options;
+        // 有点奇怪，但是rfc2328上确实是这么写的
+        if (ospf_dd->flags & DD_FLAG_ALL && nbr->id > ntohl(inet_addr(THIS_ROUTER_ID))) {
             nbr->is_master = true;
             nbr->dd_seq_num = ospf_dd->sequence_number;
-        } else if (!(ospf_dd->flags & DD_FLAG_MS) &&
-                   !(ospf_dd->flags & DD_FLAG_I) &&
-                    ospf_dd->sequence_number == nbr->dd_seq_num &&
-                    nbr->id < ntohl(inet_addr(THIS_ROUTER_ID))) {
+        } else if (!(ospf_dd->flags & DD_FLAG_MS) && !(ospf_dd->flags & DD_FLAG_I) &&
+                   ospf_dd->sequence_number == nbr->dd_seq_num && nbr->id < ntohl(inet_addr(THIS_ROUTER_ID))) {
             nbr->is_master = false;
         }
         nbr->event_negotiation_done();
         break;
+    case Neighbor::State::EXCHANGE:
+        // 如果收到了重复的DD包
+        if (nbr->dd_seq_num == ospf_dd->sequence_number) {
+            // master，丢弃重复的DD包
+            // slave，要求重传DD包
+            if (nbr->is_master) {
+                nbr->dd_rtmx = true;
+            }
+            return;
+        } else {
+            // 主从关系不匹配
+            if (ospf_dd->flags & DD_FLAG_MS && !nbr->is_master) {
+                nbr->event_seq_number_mismatch();
+                return;
+            }
+            // 意外设定了I标志
+            if (ospf_dd->flags & DD_FLAG_I) {
+                nbr->event_seq_number_mismatch();
+                return;
+            }
+        }
+        // 如果选项域与过去收到的不一致
+        if (nbr->dd_options != ospf_dd->options) {
+            nbr->event_seq_number_mismatch();
+            return;
+        }
+        // 对于slave，下一个包应当是邻接记录的dd_seq_num + 1
+        if (nbr->is_master && ospf_dd->sequence_number == nbr->dd_seq_num + 1) {
+            nbr->dd_seq_num = ospf_dd->sequence_number;
+            nbr->last_dd_data_len = ospf_hdr->length;
+            // 将lsahdrs拷贝到用于确认的dd_data中
+            memcpy(nbr->last_dd_data + sizeof(OSPF::Header) + sizeof(OSPF::DD), ospf_dd->lsahdrs,
+                   ospf_hdr->length - sizeof(OSPF::DD));
+            nbr->dd_ack = true;
+            // 将其lsahdr加入link_state_request_list
+            auto num_lsahdrs = (ospf_hdr->length - sizeof(OSPF::DD)) / sizeof(LSA::Header);
+            for (auto i = 0; i < num_lsahdrs; i++) {
+                auto lsahdr = reinterpret_cast<LSA::Header *>(ospf_dd->lsahdrs + i * sizeof(LSA::Header));
+                if (lsahdr->type == LSA::Type::ROUTER) {
+                    if (this_lsdb.get_router_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
+                        nbr->link_state_request_list.push_back(
+                            {(uint32_t)LSA::Type::ROUTER, lsahdr->link_state_id, lsahdr->advertising_router});
+                    }
+                } else if (lsahdr->type == LSA::Type::NETWORK) {
+                    if (this_lsdb.get_network_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
+                        nbr->link_state_request_list.push_back(
+                            {(uint32_t)LSA::Type::NETWORK, lsahdr->link_state_id, lsahdr->advertising_router});
+                    }
+                }
+            }
+        // 对于master，下一个包应当为邻居记录的dd_seq_num
+        } else if (!nbr->is_master && ospf_dd->sequence_number == nbr->dd_seq_num) {
+            nbr->dd_seq_num += 1;
+            // 这里就不考虑会有一次发不完的lsahdr的情况了
+            // 理论上slave应当在确认的dd中包含上一次发送的lsahdrs的列表
+            // 但这里忽略了多次发送的情况，因此直接清空即可
+            nbr->db_summary_list.clear();
+        } else {
+            nbr->event_seq_number_mismatch();
+            return;
+        }
+        // 如果收到清除了M标志的DD包
+        if (ospf_dd->flags & DD_FLAG_M) {
+            // 从机始终比主机早生成这一事件
+            nbr->event_exchange_done();
+        }
+        break;
+    case Neighbor::State::LOADING:
+    case Neighbor::State::FULL:
+        // TODO:
+        break;
     default:
         break;
     }
-
 }
 
 void recv_loop() {
@@ -245,14 +312,33 @@ static size_t send_produce_dd(Interface *intf, char *body, Neighbor *nbr) {
     if (nbr->is_master) {
         dd->flags |= DD_FLAG_MS;
     }
-    
+
     if (nbr->state == Neighbor::State::EXSTART) {
+        // 发送空的DD包
         dd->flags |= DD_FLAG_I | DD_FLAG_M;
         dd->host_to_network(0);
         return sizeof(OSPF::DD);
-    } else {
-        dd->host_to_network(this_lsdb.lsa_num());
-        return sizeof(OSPF::DD) + sizeof(LSA::Header) * this_lsdb.lsa_num();
+    } else if (nbr->state == Neighbor::State::EXCHANGE) {
+        if (nbr->dd_ack) {
+            // slave需要确认时
+            // FLAG_M和FLAG_I都不应该置位
+            // 不需要构造lsahdrs，因为已经在recv_process_dd中处理了
+            dd->host_to_network(0);
+            return nbr->last_dd_data_len;
+        } else {
+            // master
+            // 这里就不考虑会有一次发不完的lsahdr的情况了
+            // FLAG_M和FLAG_I都不应该置位
+            auto lsahdr = dd->lsahdrs;
+            for (auto& lsa : nbr->db_summary_list) {
+                memcpy(lsahdr, lsa, sizeof(LSA::Header));
+                lsahdr++;
+            }
+            dd->host_to_network(nbr->db_summary_list.size());
+            return sizeof(OSPF::DD) + sizeof(LSA::Header) * nbr->db_summary_list.size();
+        }
+    } else if (nbr->state >= Neighbor::State::LOADING) {
+        // TODO:
     }
 }
 
@@ -278,19 +364,29 @@ void send_loop() {
                     continue;
                 }
 
+                // slave收到重复dd，重发确认
+                if (nbr->dd_rtmx) {
+                    send_packet(intf, nbr->last_dd_data, nbr->last_dd_data_len, OSPF::Type::DD, nbr_ip);
+                    nbr->dd_rtmx = false;
+                }
+
+                // slave收到dd，发送用于确认的dd
+                if (nbr->dd_ack) {
+                    auto len = send_produce_dd(intf, nbr->last_dd_data + sizeof(OSPF::Header), nbr);
+                    send_packet(intf, nbr->last_dd_data, len, OSPF::Type::DD, nbr_ip);
+                    nbr->dd_ack = false;
+                }
+
                 if ((++nbr->rxmt_timer) >= intf->rxmt_interval) {
                     nbr->rxmt_timer = 0;
 
                     // DD packet
-                    if (// Exstart状态，发送空的DD包
-                        nbr->state == Neighbor::State::EXSTART || 
-                        // Exchange状态，发送DD包
-                        nbr->state == Neighbor::State::EXCHANGE) {
+                    if ( // Exstart状态，发送空的DD包
+                        (nbr->state == Neighbor::State::EXSTART) ||
+                        // Exchange状态，这里是对于master的处理，没收到确认，重传dd包
+                        (!nbr->is_master && nbr->state == Neighbor::State::EXCHANGE)) {
                         auto len = send_produce_dd(intf, data + sizeof(OSPF::Header), nbr);
                         send_packet(intf, data, len, OSPF::Type::DD, nbr_ip);
-                        if (!nbr->is_master && nbr->state == Neighbor::State::EXCHANGE) {
-                            nbr->event_exchange_done();
-                        }
                     }
 
                     // LSR packet
@@ -299,6 +395,8 @@ void send_loop() {
                 }
             }
         }
+
+        // 睡眠1s，实现timer
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }

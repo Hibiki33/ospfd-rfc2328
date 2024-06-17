@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "interface.hpp"
+#include "lsdb.hpp"
 #include "neighbor.hpp"
 #include "utils.hpp"
 
@@ -9,6 +10,11 @@ static const char *state_names[]{"DOWN", "ATTEMPT", "INIT", "TWOWAY", "EXSTART",
 
 void Neighbor::event_hello_received() {
     // assert(state == State::DOWN || state == State::ATTEMPT || state == State::INIT);
+    if (state >= State::INIT) {
+        inactivity_timer = 40;
+        return;
+    }
+
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " received hello:"
               << "\tstate " << state_names[(int)state] << " -> ";
     switch (state) {
@@ -57,6 +63,9 @@ bool Neighbor::estab_adj() noexcept {
 // TODO: need to implement details
 void Neighbor::event_2way_received() {
     assert(state == State::INIT || state >= State::TWOWAY);
+    if (state >= State::TWOWAY) {
+        return;
+    }
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " received 2way:"
               << "\tstate " << state_names[(int)state] << " -> ";
     if (state == State::INIT) {
@@ -72,9 +81,8 @@ void Neighbor::event_2way_received() {
         default:
             // 需要建立邻接 / P2P / P2MP / VIRTUAL
             state = State::EXSTART;
-            dd_seq_num = 0x80000000 + 1;
+            dd_seq_num = 0;
             is_master = true;
-            // TODO: prepare empty DD packet
             break;
         }
     }
@@ -85,6 +93,18 @@ void Neighbor::event_negotiation_done() {
     assert(state == State::EXSTART);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " negotiation done:"
               << "\tstate " << state_names[(int)state] << " -> ";
+    // 初始化dd_summary_list
+    this_lsdb.mtx.lock();
+    for (auto& rlsa : this_lsdb.router_lsas) {
+        db_summary_list.push_back(&rlsa->header);
+    }
+    for (auto& nlsa : this_lsdb.network_lsas) {
+        db_summary_list.push_back(&nlsa->header);
+    }
+    for (auto& slsa : this_lsdb.summary_lsas) {
+        db_summary_list.push_back(&slsa->header);
+    }
+    this_lsdb.mtx.unlock();
     state = State::EXCHANGE;
     std::cout << state_names[(int)state] << std::endl;
 }
@@ -117,7 +137,7 @@ void Neighbor::event_adj_ok() {
     if (state == State::TWOWAY) {
         if (estab_adj()) {
             state = State::EXSTART;
-            dd_seq_num = 0x80000000 + 1;
+            dd_seq_num = 0;
             is_master = true;
         }
     } else if (state >= State::EXSTART) {
@@ -130,17 +150,30 @@ void Neighbor::event_adj_ok() {
 
 void Neighbor::event_seq_number_mismatch() {
     assert(state >= State::EXCHANGE);
-    // TODO: not implemented
+    std::cout << "Neighbor " << ip_to_str(ip_addr) << " seq number mismatch:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::EXSTART;
+    dd_seq_num = 0;
+    is_master = true;
+    link_state_rxmt_list.clear();
+    db_summary_list.clear();
+    link_state_request_list.clear();
+    // 重新发空的DD包
+    std::cout << state_names[(int)state] << std::endl;
 }
-
-// TODO: 下面4个event需要实现：清除连接状态重传列表、数据库汇总列表和连接状态请求列表中的LSA
 
 void Neighbor::event_1way_received() {
     assert(state >= State::TWOWAY || state == State::INIT);
+    if (state == State::INIT) {
+        return;
+    }
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " received 1way:"
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::INIT;
     inactivity_timer = 40;
+    link_state_rxmt_list.clear();
+    db_summary_list.clear();
+    link_state_request_list.clear();
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -150,6 +183,9 @@ void Neighbor::event_kill_nbr() {
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
     inactivity_timer = 0;
+    link_state_rxmt_list.clear();
+    db_summary_list.clear();
+    link_state_request_list.clear();
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -157,6 +193,9 @@ void Neighbor::event_inactivity_timer() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " inactivity timer:"
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
+    link_state_rxmt_list.clear();
+    db_summary_list.clear();
+    link_state_request_list.clear();
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -165,5 +204,8 @@ void Neighbor::event_ll_down() {
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
     inactivity_timer = 0;
+    link_state_rxmt_list.clear();
+    db_summary_list.clear();
+    link_state_request_list.clear();
     std::cout << state_names[(int)state] << std::endl;
 }

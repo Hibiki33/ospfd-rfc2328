@@ -1,8 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <list>
 
+#include <netinet/if_ether.h>
 #include <netinet/in.h>
 
 #include "packet.hpp"
@@ -33,14 +35,21 @@ public:
 
     /* 是否为master */
     bool is_master = false;
+    /* 如果是slave，用于确认dd包 */
+    std::atomic<bool> dd_ack;
+    /* 如果是slave，用于重传dd包 */
+    std::atomic<bool> dd_rtmx;
 
     /* DD包的序列号 */
     uint32_t dd_seq_num;
 
-    /* 最后一个收到的DD包 */
-    uint32_t last_dd_seq_num;
+    /* 最后一个DD包，用于重传 */
+    // uint32_t last_dd_seq_num;
     uint32_t last_dd_data_len;
-    char last_dd_data[1024];
+    char last_dd_data[ETH_DATA_LEN];
+
+    /* 是否需要更多的DD包 */
+    // bool dd_more = true;
 
     /* 邻居的路由器标识 */
     uint32_t id;
@@ -63,13 +72,18 @@ public:
     std::list<LSA::Base *> link_state_rxmt_list;
 
     /* Exchange状态下的链路状态数据 */
-    std::list<LSA::Base *> link_state_list;
+    std::list<LSA::Header *> db_summary_list;
 
     /* Loading状态下需要请求的链路状态数据 */
-    std::list<LSA::Base *> link_state_request_list;
+    std::list<OSPF::LSR> link_state_request_list;
+
+    /* 邻居DD选项 */
+    uint8_t dd_options;
 
 public:
     Neighbor(in_addr_t ip_addr, Interface *interface) : ip_addr(ip_addr), host_interface(interface) {
+        dd_rtmx = false;
+        dd_ack = false;
     }
     ~Neighbor() = default;
 
