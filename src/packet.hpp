@@ -366,9 +366,33 @@ struct DD {
 
 /* OSPF link state request packet structure. */
 struct LSR {
-    uint32_t ls_type;
-    uint32_t link_state_id;
-    uint32_t advertising_router;
+    struct Request {
+        uint32_t ls_type;
+        uint32_t link_state_id;
+        uint32_t advertising_router;
+
+        void host_to_network() noexcept {
+            ls_type = htonl(ls_type);
+            link_state_id = htonl(link_state_id);
+            advertising_router = htonl(advertising_router);
+        }
+
+        void network_to_host() noexcept {
+            ls_type = ntohl(ls_type);
+            link_state_id = ntohl(link_state_id);
+            advertising_router = ntohl(advertising_router);
+        }
+    } reqs[0];
+
+    void host_to_network(size_t reqs_num) noexcept {
+        for (auto i = 0; i < reqs_num; ++i) {
+            reqs[i].host_to_network();
+        }
+    }
+
+    void network_to_host() noexcept {
+        // 不转换reqs
+    }
 } __attribute__((packed));
 
 /* OSPF link state update packet structure. */
@@ -376,6 +400,14 @@ struct LSU {
     uint32_t num_lsas;
     // LSA是不定长的，很难在这里定义多个LSA
     // 将多个LSA的管理交给调用者
+
+    void host_to_network() noexcept {
+        num_lsas = htonl(num_lsas);
+    }
+
+    void network_to_host() noexcept {
+        num_lsas = ntohl(num_lsas);
+    }
 } __attribute__((packed));
 
 /* OSPF link state acknowledgment packet structure. */

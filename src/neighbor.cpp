@@ -60,7 +60,6 @@ bool Neighbor::estab_adj() noexcept {
         ip_addr == backup_designated_router;
 }
 
-// TODO: need to implement details
 void Neighbor::event_2way_received() {
     assert(state == State::INIT || state >= State::TWOWAY);
     if (state >= State::TWOWAY) {
@@ -95,6 +94,7 @@ void Neighbor::event_negotiation_done() {
               << "\tstate " << state_names[(int)state] << " -> ";
     // 初始化dd_summary_list
     this_lsdb.mtx.lock();
+    db_summary_list_mtx.lock();
     for (auto& rlsa : this_lsdb.router_lsas) {
         db_summary_list.push_back(&rlsa->header);
     }
@@ -104,6 +104,7 @@ void Neighbor::event_negotiation_done() {
     for (auto& slsa : this_lsdb.summary_lsas) {
         db_summary_list.push_back(&slsa->header);
     }
+    db_summary_list_mtx.unlock();
     this_lsdb.mtx.unlock();
     state = State::EXCHANGE;
     std::cout << state_names[(int)state] << std::endl;
@@ -113,13 +114,23 @@ void Neighbor::event_exchange_done() {
     assert(state == State::EXCHANGE);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " exchange done:"
               << "\tstate " << state_names[(int)state] << " -> ";
-    state = State::LOADING;
+    // state = State::LOADING;
+    state = link_state_request_list.empty() ? State::FULL : State::LOADING;
     std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_bad_lsreq() {
     assert(state >= State::EXCHANGE);
-    // TODO: not implemented
+    // simarlar to event_seq_number_mismatch
+    std::cout << "Neighbor " << ip_to_str(ip_addr) << " bad lsreq:"
+              << "\tstate " << state_names[(int)state] << " -> ";
+    state = State::EXSTART;
+    dd_seq_num = 0;
+    is_master = true;
+    link_state_rxmt_list.clear();
+    db_summary_list.clear();
+    link_state_request_list.clear();
+    std::cout << state_names[(int)state] << std::endl;
 }
 
 void Neighbor::event_loading_done() {

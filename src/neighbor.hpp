@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <list>
+#include <mutex>
 
 #include <netinet/if_ether.h>
 #include <netinet/in.h>
@@ -47,6 +48,10 @@ public:
     // uint32_t last_dd_seq_num;
     uint32_t last_dd_data_len;
     char last_dd_data[ETH_DATA_LEN];
+    /* 记录上一次传输的dd包中lsahdr的数量 */
+    size_t dd_lsahdr_cnt = 0;
+    /* 是否收到了!FLAG_M的DD包 */
+    bool dd_recv_no_more = false;
 
     /* 是否需要更多的DD包 */
     // bool dd_more = true;
@@ -73,9 +78,15 @@ public:
 
     /* Exchange状态下的链路状态数据 */
     std::list<LSA::Header *> db_summary_list;
+    std::mutex db_summary_list_mtx;
 
-    /* Loading状态下需要请求的链路状态数据 */
-    std::list<OSPF::LSR> link_state_request_list;
+    /* Exchange和Loading状态下需要请求的链路状态数据 */
+    std::list<OSPF::LSR::Request> link_state_request_list;
+    std::mutex link_state_request_list_mtx;
+
+    /* Exchange和Loading状态下收到的链路状态请求，需要在发送循环中处理 */
+    std::list<OSPF::LSR::Request> req_recv_list; // 将lsr包转化为list
+    std::mutex req_recv_list_mtx;
 
     /* 邻居DD选项 */
     uint8_t dd_options;
