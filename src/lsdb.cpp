@@ -32,7 +32,7 @@ NetworkLSA *LSDB::get_network_lsa(uint32_t ls_id) {
     return it != network_lsas.end() ? *it : nullptr;
 }
 
-void LSDB::add_lsa(char *net_ptr) {
+LSA::Base *LSDB::add_lsa(char *net_ptr) {
     auto hdr = reinterpret_cast<LSA::Header *>(net_ptr);
 
     if (hdr->type == LSA::Type::ROUTER) {

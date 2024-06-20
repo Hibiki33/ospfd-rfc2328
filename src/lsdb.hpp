@@ -37,7 +37,7 @@ public:
     NetworkLSA *get_network_lsa(uint32_t ls_id);
     NetworkLSA *get_network_lsa(uint32_t ls_id, uint32_t adv_rtr);
 
-    void add_lsa(char *net_ptr);
+    LSA::Base *add_lsa(char *net_ptr);
     void remove_lsa(uint32_t ls_id, uint32_t adv_rtr, LSA::Type type);
     void flood_lsa(LSA::Base *lsa, std::vector<Interface *>& sel_interfaces);
 

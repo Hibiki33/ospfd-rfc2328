@@ -36,10 +36,6 @@ public:
 
     /* 是否为master */
     bool is_master = false;
-    /* 如果是slave，用于确认dd包 */
-    std::atomic<bool> dd_ack;
-    /* 如果是slave，用于重传dd包 */
-    std::atomic<bool> dd_rtmx;
 
     /* DD包的序列号 */
     uint32_t dd_seq_num;
@@ -52,9 +48,6 @@ public:
     size_t dd_lsahdr_cnt = 0;
     /* 是否收到了!FLAG_M的DD包 */
     bool dd_recv_no_more = false;
-
-    /* 是否需要更多的DD包 */
-    // bool dd_more = true;
 
     /* 邻居的路由器标识 */
     uint32_t id;
@@ -84,17 +77,16 @@ public:
     std::list<OSPF::LSR::Request> link_state_request_list;
     std::mutex link_state_request_list_mtx;
 
-    /* Exchange和Loading状态下收到的链路状态请求，需要在发送循环中处理 */
-    std::list<OSPF::LSR::Request> req_recv_list; // 将lsr包转化为list
-    std::mutex req_recv_list_mtx;
+    /* Exchange和Loading状态下收到的链路状态请求，准备用于lsu中发送 */
+    std::list<LSA::Base *> lsa_update_list;
 
     /* 邻居DD选项 */
     uint8_t dd_options;
 
 public:
     Neighbor(in_addr_t ip_addr, Interface *interface) : ip_addr(ip_addr), host_interface(interface) {
-        dd_rtmx = false;
-        dd_ack = false;
+        // dd_rtmx = false;
+        // dd_ack = false;
     }
     ~Neighbor() = default;
 
