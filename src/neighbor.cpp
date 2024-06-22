@@ -16,7 +16,7 @@ void Neighbor::event_hello_received() {
     }
 
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " received hello:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     switch (state) {
     case State::DOWN:
     case State::ATTEMPT:
@@ -35,7 +35,7 @@ void Neighbor::event_hello_received() {
 void Neighbor::event_start() {
     assert(state == State::DOWN);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " start:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::ATTEMPT;
     std::cout << state_names[(int)state] << std::endl;
 }
@@ -66,7 +66,7 @@ void Neighbor::event_2way_received() {
         return;
     }
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " received 2way:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     if (state == State::INIT) {
         switch (host_interface->type) {
         case Interface::Type::BROADCAST:
@@ -91,10 +91,9 @@ void Neighbor::event_2way_received() {
 void Neighbor::event_negotiation_done() {
     assert(state == State::EXSTART);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " negotiation done:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     // 初始化dd_summary_list
     this_lsdb.mtx.lock();
-    db_summary_list_mtx.lock();
     for (auto& rlsa : this_lsdb.router_lsas) {
         db_summary_list.push_back(&rlsa->header);
     }
@@ -104,7 +103,6 @@ void Neighbor::event_negotiation_done() {
     for (auto& slsa : this_lsdb.summary_lsas) {
         db_summary_list.push_back(&slsa->header);
     }
-    db_summary_list_mtx.unlock();
     this_lsdb.mtx.unlock();
     state = State::EXCHANGE;
     std::cout << state_names[(int)state] << std::endl;
@@ -113,7 +111,7 @@ void Neighbor::event_negotiation_done() {
 void Neighbor::event_exchange_done() {
     assert(state == State::EXCHANGE);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " exchange done:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     // state = State::LOADING;
     state = link_state_request_list.empty() ? State::FULL : State::LOADING;
     std::cout << state_names[(int)state] << std::endl;
@@ -123,7 +121,7 @@ void Neighbor::event_bad_lsreq() {
     assert(state >= State::EXCHANGE);
     // simarlar to event_seq_number_mismatch
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " bad lsreq:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::EXSTART;
     dd_seq_num = 0;
     is_master = false;
@@ -136,7 +134,7 @@ void Neighbor::event_bad_lsreq() {
 void Neighbor::event_loading_done() {
     assert(state == State::LOADING);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " loading done:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::FULL;
     std::cout << state_names[(int)state] << std::endl;
 }
@@ -144,7 +142,7 @@ void Neighbor::event_loading_done() {
 void Neighbor::event_adj_ok() {
     assert(state >= State::TWOWAY);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " adj ok:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     if (state == State::TWOWAY) {
         if (estab_adj()) {
             state = State::EXSTART;
@@ -162,7 +160,7 @@ void Neighbor::event_adj_ok() {
 void Neighbor::event_seq_number_mismatch() {
     assert(state >= State::EXCHANGE);
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " seq number mismatch:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::EXSTART;
     dd_seq_num = 0;
     is_master = false;
@@ -179,7 +177,7 @@ void Neighbor::event_1way_received() {
         return;
     }
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " received 1way:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::INIT;
     inactivity_timer = 40;
     link_state_rxmt_list.clear();
@@ -191,7 +189,7 @@ void Neighbor::event_1way_received() {
 // Force to kill the neighbor, Any -> State::DOWN
 void Neighbor::event_kill_nbr() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " kill:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
     inactivity_timer = 0;
     link_state_rxmt_list.clear();
@@ -202,7 +200,7 @@ void Neighbor::event_kill_nbr() {
 
 void Neighbor::event_inactivity_timer() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " inactivity timer:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
     link_state_rxmt_list.clear();
     db_summary_list.clear();
@@ -212,7 +210,7 @@ void Neighbor::event_inactivity_timer() {
 
 void Neighbor::event_ll_down() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " ll down:"
-              << "\tstate " << state_names[(int)state] << " -> ";
+              << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
     inactivity_timer = 0;
     link_state_rxmt_list.clear();

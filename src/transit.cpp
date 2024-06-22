@@ -71,7 +71,7 @@ void recv_loop() {
             process_dd(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSR:
-            // process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+            process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSU:
             // process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
@@ -122,19 +122,19 @@ void send_loop() {
                     }
 
                     // LSR packet
-                    // if (nbr->state == Neighbor::State::EXCHANGE || nbr->state == Neighbor::State::LOADING) {
-                    //     nbr->link_state_request_list_mtx.lock();
-                    //     if (nbr->link_state_request_list.empty()) {
-                    //         if (nbr->state == Neighbor::State::LOADING) {
-                    //             nbr->link_state_request_list_mtx.unlock();
-                    //             nbr->event_loading_done();
-                    //         }
-                    //     } else {
-                    //         auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
-                    //         send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
-                    //     }
-                    //     nbr->link_state_request_list_mtx.unlock();
-                    // }
+                    if (nbr->state == Neighbor::State::EXCHANGE || nbr->state == Neighbor::State::LOADING) {
+                        nbr->link_state_request_list_mtx.lock();
+                        if (nbr->link_state_request_list.empty()) {
+                            if (nbr->state == Neighbor::State::LOADING) {
+                                nbr->link_state_request_list_mtx.unlock();
+                                nbr->event_loading_done();
+                            }
+                        } else {
+                            auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
+                            send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
+                        }
+                        nbr->link_state_request_list_mtx.unlock();
+                    }
                 }
             }
         }
