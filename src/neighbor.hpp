@@ -41,9 +41,12 @@ public:
     uint32_t dd_seq_num;
 
     /* 最后一个DD包，用于重传 */
-    // uint32_t last_dd_seq_num;
+    uint32_t recv_dd_seq_num;
+
+    /* 最后一个发出的DD包的长度和数据 */
     uint32_t last_dd_data_len;
     char last_dd_data[ETH_DATA_LEN];
+    
     /* 记录上一次传输的dd包中lsahdr的数量 */
     size_t dd_lsahdr_cnt = 0;
     /* 是否收到了!FLAG_M的DD包 */
@@ -71,6 +74,7 @@ public:
 
     /* Exchange状态下的链路状态数据 */
     std::list<LSA::Header *> db_summary_list;
+    std::list<LSA::Header *>::iterator db_summary_send_iter;
     std::mutex db_summary_list_mtx;
 
     /* Exchange和Loading状态下需要请求的链路状态数据 */
@@ -82,6 +86,9 @@ public:
 
     /* 邻居DD选项 */
     uint8_t dd_options;
+
+    /* 向邻居发送的DD包，Init标志 */
+    bool dd_init = true;
 
 public:
     Neighbor(in_addr_t ip_addr, Interface *interface) : ip_addr(ip_addr), host_interface(interface) {

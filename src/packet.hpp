@@ -415,21 +415,16 @@ struct LSAck {
     LSA::Header lsahdrs[0];
 } __attribute__((packed));
 
-/* OSPF packet Data. */
-struct PacketData {
-    const char *data;
-    size_t len;
-    Type type;
-    uint32_t dst;
-
-    uint32_t id;
-    uint32_t age;
-    uint32_t duration;
-
-    PacketData(const char *data, size_t len, Type type, uint32_t dst, uint32_t duration)
-        : data(data), len(len), type(type), dst(dst), age(0), duration(duration) {
-    }
-    ~PacketData() = default;
-};
+void send_packet(Interface *intf, char *packet, size_t len, OSPF::Type type, in_addr_t dst);
+size_t produce_hello(Interface *intf, char *body);
+void process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip);
+size_t produce_dd(Interface *intf, char *body, Neighbor *nbr);
+void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip);
+size_t produce_lsr(Interface *intf, char *body, Neighbor *nbr);
+void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip);
+size_t produce_lsu(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_update_list);
+void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip);
+size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_ack_list);
+void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip);
 
 } // namespace OSPF

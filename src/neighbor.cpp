@@ -81,7 +81,7 @@ void Neighbor::event_2way_received() {
             // 需要建立邻接 / P2P / P2MP / VIRTUAL
             state = State::EXSTART;
             dd_seq_num = 0;
-            is_master = true;
+            is_master = false;
             break;
         }
     }
@@ -126,7 +126,7 @@ void Neighbor::event_bad_lsreq() {
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::EXSTART;
     dd_seq_num = 0;
-    is_master = true;
+    is_master = false;
     link_state_rxmt_list.clear();
     db_summary_list.clear();
     link_state_request_list.clear();
@@ -149,7 +149,7 @@ void Neighbor::event_adj_ok() {
         if (estab_adj()) {
             state = State::EXSTART;
             dd_seq_num = 0;
-            is_master = true;
+            is_master = false;
         }
     } else if (state >= State::EXSTART) {
         if (!estab_adj()) {
@@ -165,7 +165,7 @@ void Neighbor::event_seq_number_mismatch() {
               << "\tstate " << state_names[(int)state] << " -> ";
     state = State::EXSTART;
     dd_seq_num = 0;
-    is_master = true;
+    is_master = false;
     link_state_rxmt_list.clear();
     db_summary_list.clear();
     link_state_request_list.clear();
