@@ -74,9 +74,10 @@ void recv_loop() {
             process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSU:
-            // process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+            process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSACK:
+            // process_lsack(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         default:
             break;
@@ -113,7 +114,7 @@ void send_loop() {
                     // Exstart状态，发送空的DD包
                     if (nbr->state == Neighbor::State::EXSTART) {
                         // 空的dd包只在此处生成
-                        nbr->last_dd_data_len = produce_dd(intf, nbr->last_dd_data  + sizeof(OSPF::Header), nbr);
+                        nbr->last_dd_data_len = produce_dd(intf, nbr->last_dd_data + sizeof(OSPF::Header), nbr);
                         send_packet(intf, nbr->last_dd_data, nbr->last_dd_data_len, OSPF::Type::DD, nbr_ip);
                     }
                     // master + Exchange状态，没收到确认，重传dd包
@@ -123,17 +124,21 @@ void send_loop() {
 
                     // LSR packet
                     if (nbr->state == Neighbor::State::EXCHANGE || nbr->state == Neighbor::State::LOADING) {
-                        nbr->link_state_request_list_mtx.lock();
-                        if (nbr->link_state_request_list.empty()) {
-                            if (nbr->state == Neighbor::State::LOADING) {
-                                nbr->link_state_request_list_mtx.unlock();
-                                nbr->event_loading_done();
-                            }
-                        } else {
-                            auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
+                        auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
+                        if (len != 0) {
                             send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
                         }
-                        nbr->link_state_request_list_mtx.unlock();
+
+                        // nbr->link_state_request_list_mtx.lock();
+                        // if (nbr->link_state_request_list.empty()) {
+                        //     if (nbr->state == Neighbor::State::LOADING) {
+                        //         nbr->event_loading_done();
+                        //     }
+                        // } else {
+                        //     auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
+                        //     send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
+                        // }
+                        // nbr->link_state_request_list_mtx.unlock();
                     }
                 }
             }

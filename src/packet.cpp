@@ -148,7 +148,7 @@ size_t produce_dd(Interface *intf, char *body, Neighbor *nbr) {
     if (nbr->dd_init) {
         dd->flags |= DD_FLAG_I;
     }
-    
+
     dd_len = sizeof(OSPF::DD);
     if (nbr->dd_init) {
         dd->host_to_network(0);
@@ -259,11 +259,11 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
             nbr->event_seq_number_mismatch();
             return;
         }
-        if (nbr->is_master && // 自己为 slave
+        if (nbr->is_master &&                                  // 自己为 slave
             ospf_dd->sequence_number == nbr->dd_seq_num + 1) { // 对于slave，下一个包应当是邻接记录的dd_seq_num + 1
             nbr->dd_seq_num = ospf_dd->sequence_number;
             accept = true;
-        } else if (!nbr->is_master && // 自己为master
+        } else if (!nbr->is_master &&                             // 自己为master
                    ospf_dd->sequence_number == nbr->dd_seq_num) { // 对于master，下一个包应当为邻居记录的dd_seq_num
             nbr->dd_seq_num += 1;
             accept = true;
@@ -306,25 +306,23 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
         LSA::Header *lsahdr = ospf_dd->lsahdrs;
         for (auto i = 0; i < num_lsahdrs; ++i) {
             lsahdr->network_to_host();
+            nbr->link_state_request_list_mtx.lock();
+            this_lsdb.mtx.lock();
             if (lsahdr->type == LSA::Type::ROUTER) {
                 if (this_lsdb.get_router_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
-                    nbr->link_state_request_list.push_back({
-                        (uint32_t)LSA::Type::ROUTER, 
-                        lsahdr->link_state_id, 
-                        lsahdr->advertising_router
-                    });
+                    nbr->link_state_request_list.push_back(
+                        {(uint32_t)LSA::Type::ROUTER, lsahdr->link_state_id, lsahdr->advertising_router});
                 }
             } else if (lsahdr->type == LSA::Type::NETWORK) {
                 if (this_lsdb.get_network_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
-                    nbr->link_state_request_list.push_back({
-                        (uint32_t)LSA::Type::NETWORK, 
-                        lsahdr->link_state_id, 
-                        lsahdr->advertising_router
-                    });
+                    nbr->link_state_request_list.push_back(
+                        {(uint32_t)LSA::Type::NETWORK, lsahdr->link_state_id, lsahdr->advertising_router});
                 }
             } else {
                 // TODO: 其他类型的LSA
             }
+            this_lsdb.mtx.unlock();
+            nbr->link_state_request_list_mtx.unlock();
             lsahdr++;
         }
 
@@ -343,7 +341,7 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
 
 size_t produce_lsr(Interface *intf, char *body, Neighbor *nbr) {
     // link_state_request_list已经锁住了
-    
+
     // 原本打算只发一个请求
     // auto lsr = reinterpret_cast<OSPF::LSR *>(body);
     // auto ls_req = &nbr->link_state_request_list.front();
@@ -355,12 +353,23 @@ size_t produce_lsr(Interface *intf, char *body, Neighbor *nbr) {
     // 一次性发完得了...
     auto lsr = reinterpret_cast<OSPF::LSR *>(body);
     auto lsr_req = lsr->reqs;
+    nbr->link_state_request_list_mtx.lock();
+    if (nbr->link_state_request_list.empty()) {
+        nbr->link_state_request_list_mtx.unlock();
+        // 如果时loading状态且已经没有请求，触发loading_done事件
+        if (nbr->state == Neighbor::State::LOADING) {
+            nbr->event_loading_done();
+        }
+        return 0;
+    }
     for (auto& req : nbr->link_state_request_list) {
         memcpy(lsr_req, &req, sizeof(OSPF::LSR::Request));
         lsr_req++;
     }
     lsr->host_to_network(nbr->link_state_request_list.size());
-    return sizeof(OSPF::LSR::Request) * nbr->link_state_request_list.size();
+    auto len = sizeof(OSPF::LSR::Request) * nbr->link_state_request_list.size();
+    nbr->link_state_request_list_mtx.unlock();
+    return len;
 }
 
 void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
@@ -379,6 +388,7 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto req_end = reinterpret_cast<decltype(req)>(ospf_packet + ospf_hdr->length);
     char lsu_data[ETH_DATA_LEN];
     std::list<LSA::Base *> lsa_update_list;
+    this_lsdb.mtx.lock();
     while (req != req_end) {
         req->network_to_host();
         auto lsa = this_lsdb.get_router_lsa(req->link_state_id, req->advertising_router);
@@ -388,6 +398,9 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
         lsa_update_list.push_back(lsa);
         req++;
     }
+    this_lsdb.mtx.unlock();
+
+    // 立即回复LSU（其实可以给发send线程一个信号来处理，可以避免一次数组的分配）
     auto len = produce_lsu(intf, lsu_data + sizeof(OSPF::Header), nbr, lsa_update_list);
     send_packet(intf, lsu_data, len, OSPF::Type::LSU, src_ip);
 }
@@ -396,64 +409,86 @@ size_t produce_lsu(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Ba
     auto lsu = reinterpret_cast<OSPF::LSU *>(body);
     size_t offset = sizeof(OSPF::LSU);
     for (auto& lsa : nbr->lsa_update_list) {
-        lsa->to_packet(body + offset);
+        lsa->to_packet(body + offset); // 此处已经转化位网络字节序
         lsu->num_lsas += 1;
     }
     lsu->host_to_network();
     return offset;
 }
 
-// void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
-//     auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
-//     auto ospf_lsu = reinterpret_cast<OSPF::LSU *>(ospf_packet + sizeof(OSPF::Header));
-//     auto nbr = intf->get_neighbor_by_ip(src_ip);
-//     assert(nbr != nullptr);
+void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
+    auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
+    auto ospf_lsu = reinterpret_cast<OSPF::LSU *>(ospf_packet + sizeof(OSPF::Header));
+    auto nbr = intf->get_neighbor_by_ip(src_ip);
+    assert(nbr != nullptr);
+    ospf_lsu->network_to_host();
 
-//     ospf_hdr->network_to_host();
-//     ospf_lsu->network_to_host();
+    // std::list<LSA::Base *> lsa_ack_list;
+    // size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
+    // for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
+    //     auto lsa = this_lsdb.add_lsa(ospf_packet + offset);
+    //     lsa_ack_list.push_back(lsa);
+    //     offset += lsa->size();
+    // }
 
-//     std::list<LSA::Base *> lsa_ack_list;
-//     size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
-//     for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
-//         auto lsa = this_lsdb.add_lsa(ospf_packet + offset);
-//         lsa_ack_list.push_back(lsa);
-//         offset += lsa->size();
-//     }
+    // // 将收到的lsa从link_state_request_list中删除
+    // nbr->link_state_request_list_mtx.lock();
+    // for (auto& lsa : lsa_ack_list) {
+    //     // 理想状态是每次删掉第一个
+    //     auto it = std::find_if(
+    //         nbr->link_state_request_list.begin(), nbr->link_state_request_list.end(), [lsa](OSPF::LSR::Request& req)
+    //         {
+    //             return req.ls_type == (uint32_t)lsa->header.type && req.link_state_id == lsa->header.link_state_id &&
+    //                    req.advertising_router == lsa->header.advertising_router;
+    //         });
+    //     if (it != nbr->link_state_request_list.end()) {
+    //         nbr->link_state_request_list.erase(it);
+    //     }
+    // }
+    // nbr->link_state_request_list_mtx.unlock();
 
-//     // 将收到的lsa从link_state_request_list中删除
-//     nbr->link_state_request_list_mtx.lock();
-//     for (auto& lsa : lsa_ack_list) {
-//         auto it = std::find_if(
-//             nbr->link_state_request_list.begin(), nbr->link_state_request_list.end(), [lsa](OSPF::LSR::Request& req) {
-//                 return req.ls_type == (uint32_t)lsa->header.type && req.link_state_id == lsa->header.link_state_id &&
-//                        req.advertising_router == lsa->header.advertising_router;
-//             });
-//         if (it != nbr->link_state_request_list.end()) {
-//             nbr->link_state_request_list.erase(it);
-//         }
-//     }
+    // 根据LSU更新数据库，并将其从link_state_request_list中删除
+    size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
+    for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
+        auto lsa = this_lsdb.add_lsa(ospf_packet + offset);
+        offset += lsa->size();
+        nbr->link_state_request_list_mtx.lock();
+        auto it = std::find_if(
+            nbr->link_state_request_list.begin(), nbr->link_state_request_list.end(), [lsa](OSPF::LSR::Request& req) {
+                return req.ls_type == (uint32_t)lsa->header.type && req.link_state_id == lsa->header.link_state_id &&
+                       req.advertising_router == lsa->header.advertising_router;
+            });
+        if (it != nbr->link_state_request_list.end()) {
+            nbr->link_state_request_list.erase(it);
+        }
+        nbr->link_state_request_list_mtx.unlock();
+    }
 
-//     // 准备发送LSAck
-//     auto len = produce_lsack(intf, ospf_packet, nbr, lsa_ack_list);
-//     send_packet(intf, ospf_packet, len, OSPF::Type::LSACK, src_ip);
-// }
+    // loading_done事件在发送LSR时触发
 
-// size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_ack_list) {
-//     auto lsack = reinterpret_cast<OSPF::LSAck *>(body);
-//     size_t offset = 0;
-//     for (auto& lsa : lsa_ack_list) {
-//         memcpy(body + offset, &lsa->header, sizeof(LSA::Header));
-//         reinterpret_cast<LSA::Header *>(body + offset)->host_to_network();
-//         offset += sizeof(LSA::Header);
-//     }
-//     return offset;
-// }
+    // 准备发送LSAck
+    // auto len = produce_lsack(intf, ospf_packet, nbr, lsa_ack_list);
+    // send_packet(intf, ospf_packet, len, OSPF::Type::LSACK, src_ip);
+    // 貌似在同步数据库的时候不需要发
+    // TODO: check一下
+}
 
-// void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
-//     auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
-//     auto ospf_lsack = reinterpret_cast<OSPF::LSAck *>(ospf_packet + sizeof(OSPF::Header));
-//     auto nbr = intf->get_neighbor_by_ip(src_ip);
-//     assert(nbr != nullptr);
-// }
+size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_ack_list) {
+    auto lsack = reinterpret_cast<OSPF::LSAck *>(body);
+    size_t offset = 0;
+    for (auto& lsa : lsa_ack_list) {
+        memcpy(body + offset, &lsa->header, sizeof(LSA::Header));
+        reinterpret_cast<LSA::Header *>(body + offset)->host_to_network();
+        offset += sizeof(LSA::Header);
+    }
+    return offset;
+}
+
+void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
+    auto ospf_hdr = reinterpret_cast<OSPF::Header *>(ospf_packet);
+    auto ospf_lsack = reinterpret_cast<OSPF::LSAck *>(ospf_packet + sizeof(OSPF::Header));
+    auto nbr = intf->get_neighbor_by_ip(src_ip);
+    assert(nbr != nullptr);
+}
 
 } // namespace OSPF

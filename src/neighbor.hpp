@@ -46,7 +46,7 @@ public:
     /* 最后一个发出的DD包的长度和数据 */
     uint32_t last_dd_data_len;
     char last_dd_data[ETH_DATA_LEN];
-    
+
     /* 记录上一次传输的dd包中lsahdr的数量 */
     size_t dd_lsahdr_cnt = 0;
     /* 是否收到了!FLAG_M的DD包 */
@@ -73,13 +73,12 @@ public:
     std::list<LSA::Base *> link_state_rxmt_list;
 
     /* Exchange状态下的链路状态数据 */
-    std::list<LSA::Header *> db_summary_list;
+    std::list<LSA::Header *> db_summary_list; // 不会被同时访问，不需要加锁（大概）
     std::list<LSA::Header *>::iterator db_summary_send_iter;
-    std::mutex db_summary_list_mtx;
 
     /* Exchange和Loading状态下需要请求的链路状态数据 */
     std::list<OSPF::LSR::Request> link_state_request_list;
-    std::mutex link_state_request_list_mtx;
+    std::mutex link_state_request_list_mtx; // 因为exchange阶段就在发lsr了，会被同时访问
 
     /* Exchange和Loading状态下收到的链路状态请求，准备用于lsu中发送 */
     std::list<LSA::Base *> lsa_update_list;
