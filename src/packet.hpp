@@ -48,6 +48,10 @@ struct Header {
         checksum = ntohs(checksum);
         length = ntohs(length);
     }
+
+    bool operator==(const Header& rhs) const {
+        return type == rhs.type && link_state_id == rhs.link_state_id && advertising_router == rhs.advertising_router;
+    }
 } __attribute__((packed));
 
 /* Router-LSA Link types. */
@@ -85,7 +89,7 @@ struct Router : public Base {
             tos = 0;
             metric = ntohs(*reinterpret_cast<uint16_t *>(net_ptr));
         }
-    };
+    } __attribute__((packed));
 
     uint16_t flags;
     uint16_t num_links;
@@ -102,7 +106,8 @@ struct Router : public Base {
         num_links = ntohs(*reinterpret_cast<uint16_t *>(net_ptr));
         net_ptr += sizeof(num_links);
         for (auto i = 0; i < num_links; ++i) {
-            links.emplace_back(net_ptr);
+            auto link = Link(net_ptr);
+            links.emplace_back(link);
             net_ptr += sizeof(Link);
         }
     }
@@ -157,11 +162,12 @@ struct Network : public Base {
         /* Parse the header. */
         header = *reinterpret_cast<Header *>(net_ptr);
         header.network_to_host();
+        auto attr_end = net_ptr + header.length;
         /* Parse the network-LSA Data. */
         net_ptr += sizeof(Header);
         network_mask = ntohl(*reinterpret_cast<in_addr_t *>(net_ptr));
         net_ptr += sizeof(network_mask);
-        while (net_ptr < reinterpret_cast<char *>(&header) + header.length) {
+        while (net_ptr < attr_end) {
             attached_routers.emplace_back(ntohl(*reinterpret_cast<in_addr_t *>(net_ptr)));
             net_ptr += sizeof(in_addr_t);
         }
@@ -381,6 +387,11 @@ struct LSR {
             ls_type = ntohl(ls_type);
             link_state_id = ntohl(link_state_id);
             advertising_router = ntohl(advertising_router);
+        }
+
+        bool operator==(const Request& rhs) const {
+            return ls_type == rhs.ls_type && link_state_id == rhs.link_state_id &&
+                   advertising_router == rhs.advertising_router;
         }
     } reqs[0];
 

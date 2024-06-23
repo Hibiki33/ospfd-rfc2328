@@ -93,7 +93,7 @@ void Neighbor::event_negotiation_done() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " negotiation done:"
               << "\n\tstate " << state_names[(int)state] << " -> ";
     // 初始化dd_summary_list
-    this_lsdb.mtx.lock();
+    this_lsdb.lock();
     for (auto& rlsa : this_lsdb.router_lsas) {
         db_summary_list.push_back(&rlsa->header);
     }
@@ -103,7 +103,7 @@ void Neighbor::event_negotiation_done() {
     for (auto& slsa : this_lsdb.summary_lsas) {
         db_summary_list.push_back(&slsa->header);
     }
-    this_lsdb.mtx.unlock();
+    this_lsdb.unlock();
     state = State::EXCHANGE;
     std::cout << state_names[(int)state] << std::endl;
 }
@@ -113,7 +113,9 @@ void Neighbor::event_exchange_done() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " exchange done:"
               << "\n\tstate " << state_names[(int)state] << " -> ";
     // state = State::LOADING;
+    link_state_request_list_mtx.lock();
     state = link_state_request_list.empty() ? State::FULL : State::LOADING;
+    link_state_request_list_mtx.unlock();
     std::cout << state_names[(int)state] << std::endl;
 }
 

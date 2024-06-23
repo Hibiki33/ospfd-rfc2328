@@ -74,6 +74,11 @@ void recv_loop() {
             process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSU:
+            if (dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS))) {
+                std::cout << "debug1" << std::endl;
+                continue;
+            }
+            std::cout << "debug2" << std::endl;
             process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSACK:
@@ -128,17 +133,6 @@ void send_loop() {
                         if (len != 0) {
                             send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
                         }
-
-                        // nbr->link_state_request_list_mtx.lock();
-                        // if (nbr->link_state_request_list.empty()) {
-                        //     if (nbr->state == Neighbor::State::LOADING) {
-                        //         nbr->event_loading_done();
-                        //     }
-                        // } else {
-                        //     auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
-                        //     send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
-                        // }
-                        // nbr->link_state_request_list_mtx.unlock();
                     }
                 }
             }

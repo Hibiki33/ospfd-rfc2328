@@ -51,7 +51,7 @@ void RoutingTable::update_route() noexcept {
     edges.clear();
 
     // 从第一类和第二类LSA中记录结点信息
-    this_lsdb.mtx.lock();
+    this_lsdb.lock();
     for (const auto& lsa : this_lsdb.router_lsas) {
         // 对路由器结点，id为其路由器id
         nodes[lsa->header.link_state_id] = {lsa->header.link_state_id, UINT32_MAX};
@@ -87,7 +87,7 @@ void RoutingTable::update_route() noexcept {
             edges[router_id].emplace_back(net_node_id, .0);
         }
     }
-    this_lsdb.mtx.unlock();
+    this_lsdb.unlock();
 
     // 执行dijkstra算法
     dijkstra();

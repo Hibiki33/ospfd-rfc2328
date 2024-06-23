@@ -307,7 +307,7 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
         for (auto i = 0; i < num_lsahdrs; ++i) {
             lsahdr->network_to_host();
             nbr->link_state_request_list_mtx.lock();
-            this_lsdb.mtx.lock();
+            this_lsdb.lock();
             if (lsahdr->type == LSA::Type::ROUTER) {
                 if (this_lsdb.get_router_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
                     nbr->link_state_request_list.push_back(
@@ -321,7 +321,7 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
             } else {
                 // TODO: 其他类型的LSA
             }
-            this_lsdb.mtx.unlock();
+            this_lsdb.unlock();
             nbr->link_state_request_list_mtx.unlock();
             lsahdr++;
         }
@@ -340,16 +340,6 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
 }
 
 size_t produce_lsr(Interface *intf, char *body, Neighbor *nbr) {
-    // link_state_request_list已经锁住了
-
-    // 原本打算只发一个请求
-    // auto lsr = reinterpret_cast<OSPF::LSR *>(body);
-    // auto ls_req = &nbr->link_state_request_list.front();
-    // auto req = lsr->reqs;
-    // memcpy(req, ls_req, sizeof(OSPF::LSR::Request));
-    // lsr->host_to_network(1);
-    // return sizeof(OSPF::LSR::Request);
-
     // 一次性发完得了...
     auto lsr = reinterpret_cast<OSPF::LSR *>(body);
     auto lsr_req = lsr->reqs;
@@ -388,7 +378,7 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto req_end = reinterpret_cast<decltype(req)>(ospf_packet + ospf_hdr->length);
     char lsu_data[ETH_DATA_LEN];
     std::list<LSA::Base *> lsa_update_list;
-    this_lsdb.mtx.lock();
+    this_lsdb.lock();
     while (req != req_end) {
         req->network_to_host();
         auto lsa = this_lsdb.get_router_lsa(req->link_state_id, req->advertising_router);
@@ -398,7 +388,7 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
         lsa_update_list.push_back(lsa);
         req++;
     }
-    this_lsdb.mtx.unlock();
+    this_lsdb.unlock();
 
     // 立即回复LSU（其实可以给发send线程一个信号来处理，可以避免一次数组的分配）
     auto len = produce_lsu(intf, lsu_data + sizeof(OSPF::Header), nbr, lsa_update_list);
@@ -423,36 +413,27 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     assert(nbr != nullptr);
     ospf_lsu->network_to_host();
 
-    // std::list<LSA::Base *> lsa_ack_list;
-    // size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
-    // for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
-    //     auto lsa = this_lsdb.add_lsa(ospf_packet + offset);
-    //     lsa_ack_list.push_back(lsa);
-    //     offset += lsa->size();
-    // }
-
-    // // 将收到的lsa从link_state_request_list中删除
-    // nbr->link_state_request_list_mtx.lock();
-    // for (auto& lsa : lsa_ack_list) {
-    //     // 理想状态是每次删掉第一个
-    //     auto it = std::find_if(
-    //         nbr->link_state_request_list.begin(), nbr->link_state_request_list.end(), [lsa](OSPF::LSR::Request& req)
-    //         {
-    //             return req.ls_type == (uint32_t)lsa->header.type && req.link_state_id == lsa->header.link_state_id &&
-    //                    req.advertising_router == lsa->header.advertising_router;
-    //         });
-    //     if (it != nbr->link_state_request_list.end()) {
-    //         nbr->link_state_request_list.erase(it);
-    //     }
-    // }
-    // nbr->link_state_request_list_mtx.unlock();
-
+    std::cout << ospf_lsu->num_lsas << std::endl;
     // 根据LSU更新数据库，并将其从link_state_request_list中删除
     size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
     for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
-        auto lsa = this_lsdb.add_lsa(ospf_packet + offset);
+        auto lsahdr = reinterpret_cast<LSA::Header *>(ospf_packet + offset);
+        LSA::Base *lsa = nullptr;
+        this_lsdb.lock();
+        if (lsahdr->type == LSA::Type::ROUTER) {
+            lsa = new LSA::Router(ospf_packet + offset);
+            this_lsdb.add(lsa);
+        } else if (lsahdr->type == LSA::Type::NETWORK) {
+            lsa = new LSA::Network(ospf_packet + offset);
+            this_lsdb.add(lsa);
+        } else {
+            assert(false && "Not implemented yet");
+        }
+        this_lsdb.unlock();
         offset += lsa->size();
+        // 将收到的lsa从link_state_request_list中删除
         nbr->link_state_request_list_mtx.lock();
+        // 理想状态是每次删掉第一个
         auto it = std::find_if(
             nbr->link_state_request_list.begin(), nbr->link_state_request_list.end(), [lsa](OSPF::LSR::Request& req) {
                 return req.ls_type == (uint32_t)lsa->header.type && req.link_state_id == lsa->header.link_state_id &&
