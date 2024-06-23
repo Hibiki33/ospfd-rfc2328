@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -67,6 +68,19 @@ struct Base {
     Header header;
     virtual size_t size() const = 0;
     virtual void to_packet(char *packet) const = 0;
+
+    bool operator<(const Base& rhs) const {
+        assert(header.link_state_id == rhs.header.link_state_id);
+        assert(header.advertising_router == rhs.header.advertising_router);
+        if (header.sequence_number != rhs.header.sequence_number) {
+            return header.sequence_number < rhs.header.sequence_number;
+        }
+        return header.checksum < rhs.header.checksum;
+    }
+
+    bool operator>(const Base& rhs) const {
+        return rhs < *this;
+    }
 };
 
 /* Router-LSA structure. */
@@ -79,6 +93,10 @@ struct Router : public Base {
         uint8_t tos;
         uint16_t metric;
 
+        Link() = default;
+        Link(in_addr_t link_id, in_addr_t link_data, LinkType type, uint16_t metric)
+            : link_id(link_id), link_data(link_data), type(type), tos(0), metric(metric) {
+        }
         Link(char *net_ptr) {
             link_id = ntohl(*reinterpret_cast<in_addr_t *>(net_ptr));
             net_ptr += sizeof(link_id);
@@ -95,6 +113,7 @@ struct Router : public Base {
     uint16_t num_links;
     std::vector<Link> links;
 
+    Router() = default;
     Router(char *net_ptr) {
         /* Parse the header. */
         header = *reinterpret_cast<Header *>(net_ptr);
@@ -158,6 +177,7 @@ struct Network : public Base {
     in_addr_t network_mask;
     std::vector<in_addr_t> attached_routers;
 
+    Network() = default;
     Network(char *net_ptr) {
         /* Parse the header. */
         header = *reinterpret_cast<Header *>(net_ptr);
@@ -427,15 +447,22 @@ struct LSAck {
 } __attribute__((packed));
 
 void send_packet(Interface *intf, char *packet, size_t len, OSPF::Type type, in_addr_t dst);
+
 size_t produce_hello(Interface *intf, char *body);
 void process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip);
-size_t produce_dd(Interface *intf, char *body, Neighbor *nbr);
+
+size_t produce_dd(char *body, Neighbor *nbr);
 void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip);
-size_t produce_lsr(Interface *intf, char *body, Neighbor *nbr);
+
+size_t produce_lsr(char *body, Neighbor *nbr);
 void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip);
-size_t produce_lsu(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_update_list);
+
+size_t produce_lsu(char *body, const std::list<LSA::Base *>& lsa_update_list);
 void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip);
-size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_ack_list);
+
+size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, const std::list<LSA::Base *>& lsa_ack_list);
 void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip);
+
+void flood_lsa(LSA::Base *lsa);
 
 } // namespace OSPF

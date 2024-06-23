@@ -135,7 +135,7 @@ void process_hello(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     }
 }
 
-size_t produce_dd(Interface *intf, char *body, Neighbor *nbr) {
+size_t produce_dd(char *body, Neighbor *nbr) {
     auto dd = reinterpret_cast<OSPF::DD *>(body);
     size_t dd_len;
     dd->interface_mtu = ETH_DATA_LEN;
@@ -227,7 +227,7 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
             // 2. 序列号为邻居的dd_seq_num
             // 3. 包含lsahdr
             // 此时已经是exchange状态，这很重要
-            nbr->last_dd_data_len = produce_dd(intf, nbr->last_dd_data + sizeof(OSPF::Header), nbr);
+            nbr->last_dd_data_len = produce_dd(nbr->last_dd_data + sizeof(OSPF::Header), nbr);
             send_packet(intf, nbr->last_dd_data, nbr->last_dd_data_len, OSPF::Type::DD, nbr->ip_addr);
             return;
         }
@@ -334,12 +334,12 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
                 return;
             }
         }
-        nbr->last_dd_data_len = produce_dd(intf, nbr->last_dd_data + sizeof(OSPF::Header), nbr);
+        nbr->last_dd_data_len = produce_dd(nbr->last_dd_data + sizeof(OSPF::Header), nbr);
         send_packet(intf, nbr->last_dd_data, nbr->last_dd_data_len, OSPF::Type::DD, nbr->ip_addr);
     }
 }
 
-size_t produce_lsr(Interface *intf, char *body, Neighbor *nbr) {
+size_t produce_lsr(char *body, Neighbor *nbr) {
     // 一次性发完得了...
     auto lsr = reinterpret_cast<OSPF::LSR *>(body);
     auto lsr_req = lsr->reqs;
@@ -391,14 +391,14 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     this_lsdb.unlock();
 
     // 立即回复LSU（其实可以给发send线程一个信号来处理，可以避免一次数组的分配）
-    auto len = produce_lsu(intf, lsu_data + sizeof(OSPF::Header), nbr, lsa_update_list);
+    auto len = produce_lsu(lsu_data + sizeof(OSPF::Header), lsa_update_list);
     send_packet(intf, lsu_data, len, OSPF::Type::LSU, src_ip);
 }
 
-size_t produce_lsu(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_update_list) {
+size_t produce_lsu(char *body, const std::list<LSA::Base *>& lsa_update_list) {
     auto lsu = reinterpret_cast<OSPF::LSU *>(body);
     size_t offset = sizeof(OSPF::LSU);
-    for (auto& lsa : nbr->lsa_update_list) {
+    for (auto& lsa : lsa_update_list) {
         lsa->to_packet(body + offset); // 此处已经转化位网络字节序
         lsu->num_lsas += 1;
     }
@@ -413,7 +413,6 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     assert(nbr != nullptr);
     ospf_lsu->network_to_host();
 
-    std::cout << ospf_lsu->num_lsas << std::endl;
     // 根据LSU更新数据库，并将其从link_state_request_list中删除
     size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
     for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
@@ -454,7 +453,7 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     // TODO: check一下
 }
 
-size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, std::list<LSA::Base *>& lsa_ack_list) {
+size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, const std::list<LSA::Base *>& lsa_ack_list) {
     auto lsack = reinterpret_cast<OSPF::LSAck *>(body);
     size_t offset = 0;
     for (auto& lsa : lsa_ack_list) {
@@ -470,6 +469,17 @@ void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     auto ospf_lsack = reinterpret_cast<OSPF::LSAck *>(ospf_packet + sizeof(OSPF::Header));
     auto nbr = intf->get_neighbor_by_ip(src_ip);
     assert(nbr != nullptr);
+}
+
+void flood_lsa(LSA::Base *lsa) {
+    char buf[ETH_DATA_LEN];
+    auto len = produce_lsu(buf + sizeof(OSPF::Header), {lsa});
+    for (auto& intf : this_interfaces) {
+        if (intf->state == Interface::State::DROTHER || intf->state == Interface::State::BACKUP ||
+            intf->state == Interface::State::POINT2POINT) {
+            send_packet(intf, buf, len, OSPF::Type::LSU, inet_addr(ALL_SPF_ROUTERS));
+        }
+    }
 }
 
 } // namespace OSPF

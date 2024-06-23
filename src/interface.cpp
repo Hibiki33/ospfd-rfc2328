@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "interface.hpp"
+#include "lsdb.hpp"
 #include "neighbor.hpp"
 #include "transit.hpp"
 #include "utils.hpp"
@@ -93,7 +94,7 @@ void Interface::elect_designated_router() {
     // backup_designated_router = bdr->id;
 
     // If DR/BDR changed
-    if (dr->ip_addr != designated_router || bdr->ip_addr != backup_designated_router) {
+    if (old_dr != designated_router || old_bdr != backup_designated_router) {
         for (auto& neighbor : neighbors) {
             // rfc2328中说，一旦DR/BDR改变
             // 就要检查是否需要建立(2-way->exstart)/维持(any->2-way)邻接
@@ -103,11 +104,15 @@ void Interface::elect_designated_router() {
         }
     }
 
+    if (dr->ip_addr == ip_addr && designated_router != ip_addr) {
+        MAKE_NETWORK_LSA(this);
+    }
+
     // printf("\n\tnew DR: %x\n", designated_router);
     // printf("\n\tnew BDR: %x\n", backup_designated_router);
     // printf("Electing finished.\n");
-    std::cout << "\n\tnew DR: " << ip_to_str(designated_router) << std::endl;
-    std::cout << "\n\tnew BDR: " << ip_to_str(backup_designated_router) << std::endl;
+    std::cout << "\tnew DR: " << ip_to_str(designated_router) << std::endl;
+    std::cout << "\tnew BDR: " << ip_to_str(backup_designated_router) << std::endl;
     std::cout << "Electing finished." << std::endl;
 }
 
@@ -146,6 +151,7 @@ void Interface::event_wait_timer() {
     } else {
         state = State::DROTHER;
     }
+    MAKE_ROUTER_LSA(this);
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -161,6 +167,7 @@ void Interface::event_backup_seen() {
     } else {
         state = State::DROTHER;
     }
+    MAKE_ROUTER_LSA(this);
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -176,6 +183,7 @@ void Interface::event_neighbor_change() {
     } else {
         state = State::DROTHER;
     }
+    MAKE_ROUTER_LSA(this);
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -197,6 +205,7 @@ void Interface::event_interface_down() {
     std::cout << "Interface " << ip_to_str(ip_addr) << " received interface_down:"
               << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::DOWN;
+    MAKE_ROUTER_LSA(this);
     std::cout << state_names[(int)state] << std::endl;
 }
 
@@ -298,8 +307,8 @@ void init_interfaces() {
     std::cout << "Found " << this_interfaces.size() << " interfaces." << std::endl;
     for (auto intf : this_interfaces) {
         std::cout << "Interface " << intf->name << ":" << std::endl
-                  << "\n\tip addr:" << ip_to_str(intf->ip_addr) << std::endl
-                  << "\n\tmask:" << ip_to_str(intf->mask) << std::endl;
+                  << "\tip addr:" << ip_to_str(intf->ip_addr) << std::endl
+                  << "\tmask:" << ip_to_str(intf->mask) << std::endl;
         intf->hello_timer = 0;
         intf->wait_timer = 0;
         intf->event_interface_up();

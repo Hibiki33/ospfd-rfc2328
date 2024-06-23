@@ -20,7 +20,7 @@
 
 namespace OSPF {
 
-std::atomic<bool> running;
+std::atomic<bool> running(false);
 int recv_fd;
 
 void recv_loop() {
@@ -119,7 +119,7 @@ void send_loop() {
                     // Exstart状态，发送空的DD包
                     if (nbr->state == Neighbor::State::EXSTART) {
                         // 空的dd包只在此处生成
-                        nbr->last_dd_data_len = produce_dd(intf, nbr->last_dd_data + sizeof(OSPF::Header), nbr);
+                        nbr->last_dd_data_len = produce_dd(nbr->last_dd_data + sizeof(OSPF::Header), nbr);
                         send_packet(intf, nbr->last_dd_data, nbr->last_dd_data_len, OSPF::Type::DD, nbr_ip);
                     }
                     // master + Exchange状态，没收到确认，重传dd包
@@ -129,7 +129,7 @@ void send_loop() {
 
                     // LSR packet
                     if (nbr->state == Neighbor::State::EXCHANGE || nbr->state == Neighbor::State::LOADING) {
-                        auto len = produce_lsr(intf, data + sizeof(OSPF::Header), nbr);
+                        auto len = produce_lsr(data + sizeof(OSPF::Header), nbr);
                         if (len != 0) {
                             send_packet(intf, data, len, OSPF::Type::LSR, nbr_ip);
                         }

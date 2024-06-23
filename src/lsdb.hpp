@@ -44,11 +44,24 @@ public:
     NetworkLSA *get_network_lsa(uint32_t ls_id, uint32_t adv_rtr);
 
     void add(LSA::Base *lsa) noexcept {
+        LSA::Base *old_lsa = nullptr;
         switch (lsa->header.type) {
         case LSA::Type::ROUTER:
+            old_lsa = get(LSA::Type::ROUTER, lsa->header.link_state_id, lsa->header.advertising_router);
+            if (old_lsa != nullptr) {
+                if (*lsa > *old_lsa) {
+                    del(LSA::Type::ROUTER, lsa->header.link_state_id, lsa->header.advertising_router);
+                }
+            }
             router_lsas.emplace_back(static_cast<RouterLSA *>(lsa));
             break;
         case LSA::Type::NETWORK:
+            old_lsa = get(LSA::Type::NETWORK, lsa->header.link_state_id, lsa->header.advertising_router);
+            if (old_lsa != nullptr) {
+                if (*lsa > *old_lsa) {
+                    del(LSA::Type::NETWORK, lsa->header.link_state_id, lsa->header.advertising_router);
+                }
+            }
             network_lsas.emplace_back(static_cast<NetworkLSA *>(lsa));
             break;
         default:
@@ -57,7 +70,7 @@ public:
         }
     }
 
-    void del(uint32_t ls_id, uint32_t adv_rtr, LSA::Type type) noexcept {
+    void del(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept {
         if (type == LSA::Type::ROUTER) {
             auto it = std::find_if(router_lsas.begin(), router_lsas.end(), [ls_id, adv_rtr](RouterLSA *rlsa) {
                 return rlsa->header.link_state_id == ls_id && rlsa->header.advertising_router == adv_rtr;
@@ -79,7 +92,7 @@ public:
         }
     }
 
-    LSA::Base *get(uint32_t ls_id, uint32_t adv_rtr, LSA::Type type) noexcept {
+    LSA::Base *get(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept {
         if (type == LSA::Type::ROUTER) {
             auto it = std::find_if(router_lsas.begin(), router_lsas.end(), [ls_id, adv_rtr](RouterLSA *rlsa) {
                 return rlsa->header.link_state_id == ls_id && rlsa->header.advertising_router == adv_rtr;
@@ -109,6 +122,21 @@ public:
 
 private:
     std::mutex mtx; // 保护LSDB的互斥锁
+
+public:
+    void make_lsa(LSA::Type type, Interface *interface = nullptr) noexcept;
 };
 
 extern LSDB this_lsdb;
+
+static inline void MAKE_ROUTER_LSA(Interface *interface) {
+    this_lsdb.lock();
+    this_lsdb.make_lsa(LSA::Type::ROUTER, interface);
+    this_lsdb.unlock();
+}
+
+static inline void MAKE_NETWORK_LSA(Interface *interface) {
+    this_lsdb.lock();
+    this_lsdb.make_lsa(LSA::Type::NETWORK, interface);
+    this_lsdb.unlock();
+}

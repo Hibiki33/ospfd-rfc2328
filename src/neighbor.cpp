@@ -114,7 +114,13 @@ void Neighbor::event_exchange_done() {
               << "\n\tstate " << state_names[(int)state] << " -> ";
     // state = State::LOADING;
     link_state_request_list_mtx.lock();
-    state = link_state_request_list.empty() ? State::FULL : State::LOADING;
+    MAKE_ROUTER_LSA(nullptr);
+    if (link_state_request_list.empty()) {
+        state = State::FULL;
+        MAKE_NETWORK_LSA(host_interface);
+    } else {
+        state = State::LOADING;
+    }
     link_state_request_list_mtx.unlock();
     std::cout << state_names[(int)state] << std::endl;
 }
@@ -138,6 +144,7 @@ void Neighbor::event_loading_done() {
     std::cout << "Neighbor " << ip_to_str(ip_addr) << " loading done:"
               << "\n\tstate " << state_names[(int)state] << " -> ";
     state = State::FULL;
+    MAKE_ROUTER_LSA(nullptr);
     std::cout << state_names[(int)state] << std::endl;
 }
 
