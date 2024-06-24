@@ -114,10 +114,12 @@ void Neighbor::event_exchange_done() {
               << "\n\tstate " << state_names[(int)state] << " -> ";
     // state = State::LOADING;
     link_state_request_list_mtx.lock();
-    MAKE_ROUTER_LSA(nullptr);
     if (link_state_request_list.empty()) {
         state = State::FULL;
-        MAKE_NETWORK_LSA(host_interface);
+        MAKE_ROUTER_LSA(nullptr);
+        if (host_interface->designated_router == host_interface->ip_addr) {
+            MAKE_NETWORK_LSA(host_interface);
+        }
     } else {
         state = State::LOADING;
     }

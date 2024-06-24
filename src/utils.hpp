@@ -7,7 +7,7 @@
 #include <arpa/inet.h>
 
 /* Fletcher checksum algorithm. */
-static inline uint16_t fletcher_checksum(const void *data, size_t len, size_t off) {
+static inline uint16_t fletcher16(const void *data, size_t len, size_t off) {
     const uint8_t *ptr = static_cast<const uint8_t *>(data);
     int length = len;
 

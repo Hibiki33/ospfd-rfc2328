@@ -74,9 +74,9 @@ static RouterLSA *make_router_lsa() noexcept {
         rlsa->links.emplace_back(link);
     }
 
-    rlsa->header.length = rlsa->size();
-    // checksum在发送时调用to_packet()时计算
     rlsa->num_links = rlsa->links.size();
+    rlsa->header.length = rlsa->size();
+    rlsa->make_checksum();
 
     return rlsa;
 }
@@ -103,7 +103,7 @@ static NetworkLSA *make_network_lsa(Interface *interface) noexcept {
     }
 
     nlsa->header.length = nlsa->size();
-    // checksum在发送时调用to_packet()时计算
+    nlsa->make_checksum();
 
     return nlsa;
 }

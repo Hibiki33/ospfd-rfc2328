@@ -68,6 +68,7 @@ struct Base {
     Header header;
     virtual size_t size() const = 0;
     virtual void to_packet(char *packet) const = 0;
+    virtual void make_checksum() = 0;
 
     bool operator<(const Base& rhs) const {
         assert(header.link_state_id == rhs.header.link_state_id);
@@ -140,9 +141,11 @@ struct Router : public Base {
         // auto packet = new char[size()];
 
         /* Copy the header. */
-        auto header_net = header;
-        header_net.host_to_network();
-        memcpy(packet, &header_net, sizeof(Header));
+        // auto header_net = header;
+        // header_net.host_to_network();
+        // memcpy(packet, &header_net, sizeof(Header));
+        memcpy(packet, &header, sizeof(Header));
+        reinterpret_cast<Header *>(packet)->host_to_network();
 
         /* Copy the router-LSA Data. */
         auto net_ptr = packet + sizeof(Header);
@@ -160,9 +163,16 @@ struct Router : public Base {
             *reinterpret_cast<uint16_t *>(net_ptr) = htons(link.metric);
             net_ptr += sizeof(uint16_t);
         }
-        reinterpret_cast<Header *>(packet)->checksum =
-            htons(fletcher_checksum(packet + 2, header.length - 2, offsetof(Header, checksum)));
+        // reinterpret_cast<Header *>(packet)->checksum =
+        //     htons(fletcher16(packet + 2, header.length - 2, offsetof(Header, checksum)));
         // return packet;
+    }
+
+    void make_checksum() override {
+        char *packet = new char[size()]; // alloc to avoid vla
+        to_packet(packet);
+        header.checksum = fletcher16(packet + 2, header.length - 2, 14);
+        delete[] packet;
     }
 
     bool operator==(const Router& rhs) const {
@@ -202,9 +212,11 @@ struct Network : public Base {
         // auto packet = new char[size()];
 
         /* Copy the header. */
-        auto header_net = header;
-        header_net.host_to_network();
-        memcpy(packet, &header_net, sizeof(Header));
+        // auto header_net = header;
+        // header_net.host_to_network();
+        // memcpy(packet, &header_net, sizeof(Header));
+        memcpy(packet, &header, sizeof(Header));
+        reinterpret_cast<Header *>(packet)->host_to_network();
 
         /* Copy the network-LSA Data. */
         auto net_ptr = packet + sizeof(Header);
@@ -214,9 +226,16 @@ struct Network : public Base {
             *reinterpret_cast<in_addr_t *>(net_ptr) = htonl(router);
             net_ptr += sizeof(in_addr_t);
         }
-        reinterpret_cast<Header *>(packet)->checksum =
-            htons(fletcher_checksum(packet + 2, header.length - 2, offsetof(Header, checksum)));
+        // reinterpret_cast<Header *>(packet)->checksum =
+        //     fletcher16(packet + 2, header.length - 2, offsetof(Header, checksum));
         // return packet;
+    }
+
+    void make_checksum() override {
+        char *packet = new char[size()]; // alloc to avoid vla
+        to_packet(packet);
+        header.checksum = fletcher16(packet + 2, header.length - 2, 14);
+        delete[] packet;
     }
 
     bool operator==(const Network& rhs) const {
@@ -260,9 +279,16 @@ struct Summary : public Base {
         *reinterpret_cast<in_addr_t *>(net_ptr) = htonl(network_mask);
         net_ptr += sizeof(in_addr_t);
         *reinterpret_cast<uint32_t *>(net_ptr) = htonl(metric);
-        reinterpret_cast<Header *>(packet)->checksum =
-            htons(fletcher_checksum(packet + 2, header.length - 2, offsetof(Header, checksum)));
+        // reinterpret_cast<Header *>(packet)->checksum =
+        //     fletcher16(packet + 2, header.length - 2, offsetof(Header, checksum));
         // return packet;
+    }
+
+    void make_checksum() override {
+        char *packet = new char[size()]; // alloc to avoid vla
+        to_packet(packet);
+        header.checksum = fletcher16(packet + 2, header.length - 2, 14);
+        delete[] packet;
     }
 };
 

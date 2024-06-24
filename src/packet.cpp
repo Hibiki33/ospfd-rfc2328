@@ -397,10 +397,12 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
 
 size_t produce_lsu(char *body, const std::list<LSA::Base *>& lsa_update_list) {
     auto lsu = reinterpret_cast<OSPF::LSU *>(body);
+    lsu->num_lsas = 0;
     size_t offset = sizeof(OSPF::LSU);
     for (auto& lsa : lsa_update_list) {
-        lsa->to_packet(body + offset); // 此处已经转化位网络字节序
+        lsa->to_packet(body + offset); // 此处已经转化为网络字节序
         lsu->num_lsas += 1;
+        offset += lsa->size();
     }
     lsu->host_to_network();
     return offset;
@@ -477,7 +479,7 @@ void flood_lsa(LSA::Base *lsa) {
     for (auto& intf : this_interfaces) {
         if (intf->state == Interface::State::DROTHER || intf->state == Interface::State::BACKUP ||
             intf->state == Interface::State::POINT2POINT) {
-            send_packet(intf, buf, len, OSPF::Type::LSU, inet_addr(ALL_SPF_ROUTERS));
+            send_packet(intf, buf, len, OSPF::Type::LSU, ntohl(inet_addr(ALL_SPF_ROUTERS)));
         }
     }
 }
