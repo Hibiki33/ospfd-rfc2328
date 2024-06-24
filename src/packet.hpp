@@ -106,6 +106,7 @@ struct Router : public Base {
             type = *reinterpret_cast<LinkType *>(net_ptr);
             net_ptr += sizeof(type);
             tos = 0;
+            net_ptr += sizeof(tos);
             metric = ntohs(*reinterpret_cast<uint16_t *>(net_ptr));
         }
     } __attribute__((packed));
@@ -126,14 +127,14 @@ struct Router : public Base {
         num_links = ntohs(*reinterpret_cast<uint16_t *>(net_ptr));
         net_ptr += sizeof(num_links);
         for (auto i = 0; i < num_links; ++i) {
-            auto link = Link(net_ptr);
-            links.emplace_back(link);
+            // auto link = Link(net_ptr);
+            links.emplace_back(net_ptr);
             net_ptr += sizeof(Link);
         }
     }
 
     size_t size() const override {
-        return sizeof(Header) + sizeof(flags) + sizeof(num_links) + num_links * sizeof(Link);
+        return sizeof(Header) + sizeof(flags) + sizeof(num_links) + links.size() * sizeof(Link);
     }
 
     void to_packet(char *packet) const override {
@@ -160,6 +161,8 @@ struct Router : public Base {
             net_ptr += sizeof(in_addr_t);
             *reinterpret_cast<LinkType *>(net_ptr) = link.type;
             net_ptr += sizeof(LinkType);
+            *reinterpret_cast<uint8_t *>(net_ptr) = link.tos;
+            net_ptr += sizeof(uint8_t);
             *reinterpret_cast<uint16_t *>(net_ptr) = htons(link.metric);
             net_ptr += sizeof(uint16_t);
         }
