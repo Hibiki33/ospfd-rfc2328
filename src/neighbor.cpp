@@ -4,6 +4,7 @@
 #include "interface.hpp"
 #include "lsdb.hpp"
 #include "neighbor.hpp"
+#include "route.hpp"
 #include "utils.hpp"
 
 static const char *state_names[]{"DOWN", "ATTEMPT", "INIT", "TWOWAY", "EXSTART", "EXCHANGE", "LOADING", "FULL"};

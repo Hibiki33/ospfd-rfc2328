@@ -489,7 +489,7 @@ void process_lsr(Interface *intf, char *ospf_packet, in_addr_t src_ip);
 size_t produce_lsu(char *body, const std::list<LSA::Base *>& lsa_update_list);
 void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip);
 
-size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, const std::list<LSA::Base *>& lsa_ack_list);
+size_t produce_lsack(char *body, const std::list<LSA::Header *>& ls_summary_list);
 void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip);
 
 void flood_lsa(LSA::Base *lsa);

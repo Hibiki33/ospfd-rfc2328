@@ -16,6 +16,7 @@
 #include "interface.hpp"
 #include "lsdb.hpp"
 #include "neighbor.hpp"
+#include "route.hpp"
 #include "transit.hpp"
 
 namespace OSPF {
@@ -349,6 +350,7 @@ size_t produce_lsr(char *body, Neighbor *nbr) {
         // 如果时loading状态且已经没有请求，触发loading_done事件
         if (nbr->state == Neighbor::State::LOADING) {
             nbr->event_loading_done();
+            this_routing_table.update_route();
         }
         return 0;
     }
@@ -416,9 +418,11 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     ospf_lsu->network_to_host();
 
     // 根据LSU更新数据库，并将其从link_state_request_list中删除
+    std::list<LSA::Header *> ls_summary_list;
     size_t offset = sizeof(OSPF::Header) + sizeof(OSPF::LSU);
     for (auto i = 0; i < ospf_lsu->num_lsas; ++i) {
         auto lsahdr = reinterpret_cast<LSA::Header *>(ospf_packet + offset);
+        // 尝试添加到lsdb，如果已存在则根据lsa新旧尝试更新
         LSA::Base *lsa = nullptr;
         this_lsdb.lock();
         if (lsahdr->type == LSA::Type::ROUTER) {
@@ -432,6 +436,8 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
         }
         this_lsdb.unlock();
         offset += lsa->size();
+        // 将收到的lsa加入ls_summary_list以回复LSAck
+        ls_summary_list.push_back(&lsa->header);
         // 将收到的lsa从link_state_request_list中删除
         nbr->link_state_request_list_mtx.lock();
         // 理想状态是每次删掉第一个
@@ -449,17 +455,24 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     // loading_done事件在发送LSR时触发
 
     // 准备发送LSAck
-    // auto len = produce_lsack(intf, ospf_packet, nbr, lsa_ack_list);
-    // send_packet(intf, ospf_packet, len, OSPF::Type::LSACK, src_ip);
-    // 貌似在同步数据库的时候不需要发
-    // TODO: check一下
+    // 按照标准，LSAck需要每隔一段时间，以接口为主体发送现有所有的确认，这里简化了
+    auto len = produce_lsack(ospf_packet + sizeof(OSPF::Header), ls_summary_list);
+    if (intf->type == Interface::Type::BROADCAST) {
+        if (intf->state == Interface::State::DR || intf->state == Interface::State::BACKUP) {
+            send_packet(intf, ospf_packet, len, OSPF::Type::LSACK, ntohl(inet_addr(ALL_SPF_ROUTERS)));
+        } else {
+            send_packet(intf, ospf_packet, len, OSPF::Type::LSACK, ntohl(inet_addr(ALL_DR_ROUTERS)));
+        }
+    } else {
+        send_packet(intf, ospf_packet, len, OSPF::Type::LSACK, src_ip);
+    }
 }
 
-size_t produce_lsack(Interface *intf, char *body, Neighbor *nbr, const std::list<LSA::Base *>& lsa_ack_list) {
+size_t produce_lsack(char *body, const std::list<LSA::Header *>& ls_summary_list) {
     auto lsack = reinterpret_cast<OSPF::LSAck *>(body);
     size_t offset = 0;
-    for (auto& lsa : lsa_ack_list) {
-        memcpy(body + offset, &lsa->header, sizeof(LSA::Header));
+    for (auto& lsahdr : ls_summary_list) {
+        memcpy(body + offset, lsahdr, sizeof(LSA::Header));
         reinterpret_cast<LSA::Header *>(body + offset)->host_to_network();
         offset += sizeof(LSA::Header);
     }

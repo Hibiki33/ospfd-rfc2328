@@ -25,8 +25,7 @@ ospf_LD=/usr/bin/g++
 ospf_CXX=/usr/bin/gcc
 ospf_CXX=/usr/bin/gcc
 
-ospf_CXXFLAGS=-m64 -g -O0 -std=c++11 -I/usr/include -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"0.0.0.0\"
-ospf_CXXFLAGS=-m64 -g -O0 -std=c++11 -I/usr/include -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"0.0.0.0\"
+ospf_CXXFLAGS=-m64 -g -O0 -std=c++11 -I/usr/include -DDEBUG -DOSPF_VERSION=2 -DTHIS_ROUTER_NAME=\"R0\" -DTHIS_ROUTER_ID=\"1.1.1.1\"
 ospf_LDFLAGS=-m64 -L/usr/lib -lpthread
 
 default:  ospf
@@ -36,10 +35,10 @@ all:  ospf
 .PHONY: default all  ospf
 
 ospf: build/linux/x86_64/debug/ospf
-build/linux/x86_64/debug/ospf: build/.objs/ospf/linux/x86_64/debug/src/interface.cpp.o build/.objs/ospf/linux/x86_64/debug/src/lsdb.cpp.o build/.objs/ospf/linux/x86_64/debug/src/main.cpp.o build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o build/.objs/ospf/linux/x86_64/debug/src/routing.cpp.o build/.objs/ospf/linux/x86_64/debug/src/transit.cpp.o
+build/linux/x86_64/debug/ospf: build/.objs/ospf/linux/x86_64/debug/src/interface.cpp.o build/.objs/ospf/linux/x86_64/debug/src/lsdb.cpp.o build/.objs/ospf/linux/x86_64/debug/src/main.cpp.o build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o build/.objs/ospf/linux/x86_64/debug/src/packet.cpp.o build/.objs/ospf/linux/x86_64/debug/src/route.cpp.o build/.objs/ospf/linux/x86_64/debug/src/transit.cpp.o
 	@echo linking.debug ospf
 	@mkdir -p build/linux/x86_64/debug
-	$(VV)$(ospf_LD) -o build/linux/x86_64/debug/ospf build/.objs/ospf/linux/x86_64/debug/src/interface.cpp.o build/.objs/ospf/linux/x86_64/debug/src/lsdb.cpp.o build/.objs/ospf/linux/x86_64/debug/src/main.cpp.o build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o build/.objs/ospf/linux/x86_64/debug/src/routing.cpp.o build/.objs/ospf/linux/x86_64/debug/src/transit.cpp.o $(ospf_LDFLAGS)
+	$(VV)$(ospf_LD) -o build/linux/x86_64/debug/ospf build/.objs/ospf/linux/x86_64/debug/src/interface.cpp.o build/.objs/ospf/linux/x86_64/debug/src/lsdb.cpp.o build/.objs/ospf/linux/x86_64/debug/src/main.cpp.o build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o build/.objs/ospf/linux/x86_64/debug/src/packet.cpp.o build/.objs/ospf/linux/x86_64/debug/src/route.cpp.o build/.objs/ospf/linux/x86_64/debug/src/transit.cpp.o $(ospf_LDFLAGS)
 
 build/.objs/ospf/linux/x86_64/debug/src/interface.cpp.o: src/interface.cpp
 	@echo compiling.debug src/interface.cpp
@@ -61,10 +60,15 @@ build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o: src/neighbor.cpp
 	@mkdir -p build/.objs/ospf/linux/x86_64/debug/src
 	$(VV)$(ospf_CXX) -c $(ospf_CXXFLAGS) -o build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o src/neighbor.cpp
 
-build/.objs/ospf/linux/x86_64/debug/src/routing.cpp.o: src/routing.cpp
-	@echo compiling.debug src/routing.cpp
+build/.objs/ospf/linux/x86_64/debug/src/packet.cpp.o: src/packet.cpp
+	@echo compiling.debug src/packet.cpp
 	@mkdir -p build/.objs/ospf/linux/x86_64/debug/src
-	$(VV)$(ospf_CXX) -c $(ospf_CXXFLAGS) -o build/.objs/ospf/linux/x86_64/debug/src/routing.cpp.o src/routing.cpp
+	$(VV)$(ospf_CXX) -c $(ospf_CXXFLAGS) -o build/.objs/ospf/linux/x86_64/debug/src/packet.cpp.o src/packet.cpp
+
+build/.objs/ospf/linux/x86_64/debug/src/route.cpp.o: src/route.cpp
+	@echo compiling.debug src/route.cpp
+	@mkdir -p build/.objs/ospf/linux/x86_64/debug/src
+	$(VV)$(ospf_CXX) -c $(ospf_CXXFLAGS) -o build/.objs/ospf/linux/x86_64/debug/src/route.cpp.o src/route.cpp
 
 build/.objs/ospf/linux/x86_64/debug/src/transit.cpp.o: src/transit.cpp
 	@echo compiling.debug src/transit.cpp
@@ -80,6 +84,7 @@ clean_ospf:
 	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/lsdb.cpp.o
 	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/main.cpp.o
 	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/neighbor.cpp.o
-	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/routing.cpp.o
+	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/packet.cpp.o
+	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/route.cpp.o
 	@rm -rf build/.objs/ospf/linux/x86_64/debug/src/transit.cpp.o
 

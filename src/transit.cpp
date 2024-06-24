@@ -74,11 +74,6 @@ void recv_loop() {
             process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSU:
-            if (dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS))) {
-                std::cout << "debug1" << std::endl;
-                continue;
-            }
-            std::cout << "debug2" << std::endl;
             process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
             break;
         case OSPF::Type::LSACK:

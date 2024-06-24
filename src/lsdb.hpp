@@ -43,71 +43,9 @@ public:
     NetworkLSA *get_network_lsa(uint32_t ls_id);
     NetworkLSA *get_network_lsa(uint32_t ls_id, uint32_t adv_rtr);
 
-    void add(LSA::Base *lsa) noexcept {
-        LSA::Base *old_lsa = nullptr;
-        switch (lsa->header.type) {
-        case LSA::Type::ROUTER:
-            old_lsa = get(LSA::Type::ROUTER, lsa->header.link_state_id, lsa->header.advertising_router);
-            if (old_lsa != nullptr) {
-                if (*lsa > *old_lsa) {
-                    del(LSA::Type::ROUTER, lsa->header.link_state_id, lsa->header.advertising_router);
-                }
-            }
-            router_lsas.emplace_back(static_cast<RouterLSA *>(lsa));
-            break;
-        case LSA::Type::NETWORK:
-            old_lsa = get(LSA::Type::NETWORK, lsa->header.link_state_id, lsa->header.advertising_router);
-            if (old_lsa != nullptr) {
-                if (*lsa > *old_lsa) {
-                    del(LSA::Type::NETWORK, lsa->header.link_state_id, lsa->header.advertising_router);
-                }
-            }
-            network_lsas.emplace_back(static_cast<NetworkLSA *>(lsa));
-            break;
-        default:
-            assert(false && "Not implemented yet");
-            break;
-        }
-    }
-
-    void del(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept {
-        if (type == LSA::Type::ROUTER) {
-            auto it = std::find_if(router_lsas.begin(), router_lsas.end(), [ls_id, adv_rtr](RouterLSA *rlsa) {
-                return rlsa->header.link_state_id == ls_id && rlsa->header.advertising_router == adv_rtr;
-            });
-            if (it != router_lsas.end()) {
-                delete *it;
-                router_lsas.erase(it);
-            }
-        } else if (type == LSA::Type::NETWORK) {
-            auto it = std::find_if(network_lsas.begin(), network_lsas.end(), [ls_id, adv_rtr](NetworkLSA *nlsa) {
-                return nlsa->header.link_state_id == ls_id && nlsa->header.advertising_router == adv_rtr;
-            });
-            if (it != network_lsas.end()) {
-                delete *it;
-                network_lsas.erase(it);
-            }
-        } else {
-            assert(false && "Not implemented yet");
-        }
-    }
-
-    LSA::Base *get(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept {
-        if (type == LSA::Type::ROUTER) {
-            auto it = std::find_if(router_lsas.begin(), router_lsas.end(), [ls_id, adv_rtr](RouterLSA *rlsa) {
-                return rlsa->header.link_state_id == ls_id && rlsa->header.advertising_router == adv_rtr;
-            });
-            return it != router_lsas.end() ? *it : nullptr;
-        } else if (type == LSA::Type::NETWORK) {
-            auto it = std::find_if(network_lsas.begin(), network_lsas.end(), [ls_id, adv_rtr](NetworkLSA *nlsa) {
-                return nlsa->header.link_state_id == ls_id && nlsa->header.advertising_router == adv_rtr;
-            });
-            return it != network_lsas.end() ? *it : nullptr;
-        } else {
-            assert(false && "Not implemented yet");
-            return nullptr;
-        }
-    }
+    void add(LSA::Base *lsa) noexcept;
+    void del(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept;
+    LSA::Base *get(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept;
 
     void lock() noexcept {
         mtx.lock();

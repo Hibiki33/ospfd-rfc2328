@@ -1,5 +1,9 @@
 add_rules("mode.debug", "mode.release")
 
+if is_mode("debug") then
+    add_defines("DEBUG")
+end
+
 set_languages("c++11")
 
 target("ospf")

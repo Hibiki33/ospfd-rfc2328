@@ -36,12 +36,12 @@ private:
 public:
     RoutingTable() {
         // 添加代表自己的根结点
-        auto root_id = ntohl(inet_addr(THIS_ROUTER_ID));
+        root_id = ntohl(inet_addr(THIS_ROUTER_ID));
     }
 
     std::pair<in_addr_t, Interface *> lookup_route(in_addr_t dst, in_addr_t mask) const noexcept;
     void print() const noexcept;
-    void debug(std::ostream& os) const noexcept;
+    void debug(std::ostream& os) noexcept;
 
 private:
     struct Node {

@@ -124,8 +124,8 @@ void ospf_run() {
             break;
         }
         if (cmd == "debug") {
-            std::ofstream debug_log("./debug.log", std::ios::trunc);
-            this_routing_table.debug(debug_log);
+            // std::ofstream debug_log("./debug.log", std::ios::trunc);
+            // this_routing_table.debug(debug_log);
             this_routing_table.debug(std::cout);
         }
     }
