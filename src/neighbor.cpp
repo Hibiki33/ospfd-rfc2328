@@ -104,6 +104,12 @@ void Neighbor::event_negotiation_done() {
     for (auto& slsa : this_lsdb.summary_lsas) {
         db_summary_list.push_back(&slsa->header);
     }
+    for (auto& aslsa : this_lsdb.asbr_summary_lsas) {
+        db_summary_list.push_back(&aslsa->header);
+    }
+    for (auto& elsa : this_lsdb.as_external_lsas) {
+        db_summary_list.push_back(&elsa->header);
+    }
     this_lsdb.unlock();
     state = State::EXCHANGE;
     std::cout << state_names[(int)state] << std::endl;

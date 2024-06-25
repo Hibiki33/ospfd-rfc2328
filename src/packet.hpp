@@ -67,7 +67,13 @@ enum class LinkType : uint8_t {
 struct Base {
     Header header;
     virtual size_t size() const = 0;
-    virtual void to_packet(char *packet) const = 0;
+
+    virtual void to_packet(char *packet) const {
+        /* Copy the header. */
+        memcpy(packet, &header, sizeof(Header));
+        reinterpret_cast<Header *>(packet)->host_to_network();
+    }
+
     virtual void make_checksum() = 0;
 
     bool operator<(const Base& rhs) const {
@@ -141,12 +147,7 @@ struct Router : public Base {
         /* Initialize the packet. */
         // auto packet = new char[size()];
 
-        /* Copy the header. */
-        // auto header_net = header;
-        // header_net.host_to_network();
-        // memcpy(packet, &header_net, sizeof(Header));
-        memcpy(packet, &header, sizeof(Header));
-        reinterpret_cast<Header *>(packet)->host_to_network();
+        Base::to_packet(packet);
 
         /* Copy the router-LSA Data. */
         auto net_ptr = packet + sizeof(Header);
@@ -214,12 +215,7 @@ struct Network : public Base {
         /* Initialize the packet. */
         // auto packet = new char[size()];
 
-        /* Copy the header. */
-        // auto header_net = header;
-        // header_net.host_to_network();
-        // memcpy(packet, &header_net, sizeof(Header));
-        memcpy(packet, &header, sizeof(Header));
-        reinterpret_cast<Header *>(packet)->host_to_network();
+        Base::to_packet(packet);
 
         /* Copy the network-LSA Data. */
         auto net_ptr = packet + sizeof(Header);
@@ -251,7 +247,12 @@ struct Network : public Base {
 /* Summary-LSA structure. */
 struct Summary : public Base {
     in_addr_t network_mask;
-    uint32_t metric;
+    // union {
+    //     uint8_t tos;
+    //     uint32_t metric;
+    // };
+    uint8_t tos;
+    uint32_t metric; // 实际上是24位的一个字段，需要特殊处理
 
     Summary(char *net_ptr) {
         /* Parse the header. */
@@ -261,7 +262,11 @@ struct Summary : public Base {
         net_ptr += sizeof(Header);
         network_mask = ntohl(*reinterpret_cast<in_addr_t *>(net_ptr));
         net_ptr += sizeof(network_mask);
-        metric = ntohl(*reinterpret_cast<uint32_t *>(net_ptr));
+        tos = *reinterpret_cast<uint8_t *>(net_ptr);
+        net_ptr += sizeof(tos);
+        uint8_t metric_bytes[3];
+        memcpy(metric_bytes, net_ptr, sizeof(metric_bytes));
+        metric = metric_bytes[0] << 16 | metric_bytes[1] << 8 | metric_bytes[2]; // ATTN: check
     }
 
     size_t size() const override {
@@ -272,16 +277,16 @@ struct Summary : public Base {
         /* Initialize the packet. */
         // auto packet = new char[size()];
 
-        /* Copy the header. */
-        auto header_net = header;
-        header_net.host_to_network();
-        memcpy(packet, &header_net, sizeof(Header));
+        Base::to_packet(packet);
 
         /* Copy the summary-LSA Data. */
         auto net_ptr = packet + sizeof(Header);
         *reinterpret_cast<in_addr_t *>(net_ptr) = htonl(network_mask);
         net_ptr += sizeof(in_addr_t);
-        *reinterpret_cast<uint32_t *>(net_ptr) = htonl(metric);
+        *reinterpret_cast<uint8_t *>(net_ptr) = tos;
+        net_ptr += sizeof(uint8_t);
+        uint8_t metric_bytes[3] = {(uint8_t)(metric >> 16), (uint8_t)(metric >> 8), (uint8_t)(metric)};
+        memcpy(net_ptr, metric_bytes, sizeof(metric_bytes)); // ATTN: check
         // reinterpret_cast<Header *>(packet)->checksum =
         //     fletcher16(packet + 2, header.length - 2, offsetof(Header, checksum));
         // return packet;
@@ -299,13 +304,72 @@ struct Summary : public Base {
 // ASBR-summary-LSA = Summary-LSA except for ls type
 
 /* AS-external-LSA structure. */
-struct ASExternal {
-    Header header;
+struct ASExternal : public Base {
     in_addr_t network_mask;
-    struct {
+    struct ExternRoute {
+        uint8_t tos;
+#define AS_EXTERNAL_FLAG 0x01
+        uint32_t metric; // 同样是24位的一个字段
         in_addr_t forwarding_address;
         uint32_t external_router_tag;
-    } e[0];
+    };
+
+    std::vector<ExternRoute> e;
+
+    ASExternal(char *net_ptr) {
+        /* Parse the header. */
+        header = *reinterpret_cast<Header *>(net_ptr);
+        header.network_to_host();
+        /* Parse the AS-external-LSA Data. */
+        net_ptr += sizeof(Header);
+        network_mask = ntohl(*reinterpret_cast<in_addr_t *>(net_ptr));
+        net_ptr += sizeof(network_mask);
+        while (net_ptr < net_ptr + header.length) {
+            ExternRoute er;
+            er.tos = *reinterpret_cast<uint8_t *>(net_ptr);
+            net_ptr += sizeof(er.tos);
+            uint8_t metric_bytes[3];
+            memcpy(metric_bytes, net_ptr, sizeof(metric_bytes));
+            er.metric = metric_bytes[0] << 16 | metric_bytes[1] << 8 | metric_bytes[2]; // ATTN: check
+            net_ptr += sizeof(metric_bytes);
+            er.forwarding_address = ntohl(*reinterpret_cast<in_addr_t *>(net_ptr));
+            net_ptr += sizeof(er.forwarding_address);
+            er.external_router_tag = ntohl(*reinterpret_cast<uint32_t *>(net_ptr));
+            net_ptr += sizeof(er.external_router_tag);
+            e.push_back(er);
+        }
+    }
+
+    size_t size() const override {
+        return sizeof(Header) + sizeof(network_mask) +
+               e.size() * (sizeof(uint32_t) + sizeof(in_addr_t) + sizeof(uint32_t));
+    }
+
+    void to_packet(char *packet) const override {
+        /* Initialize the packet. */
+        // auto packet = new char[size()];
+
+        Base::to_packet(packet);
+
+        /* Copy the AS-external-LSA Data. */
+        auto net_ptr = packet + sizeof(Header);
+        *reinterpret_cast<in_addr_t *>(net_ptr) = htonl(network_mask);
+        net_ptr += sizeof(in_addr_t);
+        for (const auto& er : e) {
+            *reinterpret_cast<uint8_t *>(net_ptr) = er.tos;
+            net_ptr += sizeof(er.tos);
+            uint8_t metric_bytes[3] = {(uint8_t)(er.metric >> 16), (uint8_t)(er.metric >> 8), (uint8_t)(er.metric)};
+            memcpy(net_ptr, metric_bytes, sizeof(metric_bytes)); // ATTN: check
+            net_ptr += sizeof(metric_bytes);
+            *reinterpret_cast<in_addr_t *>(net_ptr) = htonl(er.forwarding_address);
+            net_ptr += sizeof(er.forwarding_address);
+            *reinterpret_cast<uint32_t *>(net_ptr) = htonl(er.external_router_tag);
+            net_ptr += sizeof(er.external_router_tag);
+        }
+        // reinterpret_cast<Header *>(packet)->checksum =
+        //     fletcher16(packet + 2, header.length - 2, offsetof(Header, checksum));
+        // return packet;
+    }
 };
 
 } // namespace LSA

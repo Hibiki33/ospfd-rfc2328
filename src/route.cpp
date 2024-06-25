@@ -147,7 +147,33 @@ void RoutingTable::update_route() noexcept {
     // 执行dijkstra算法
     dijkstra();
 
-    // TODO: 暂时不考虑3-5类LSA
+    // 3-5 LSA
+    this_lsdb.lock();
+    // 构造区域间路由
+    for (auto& lsa : this_lsdb.summary_lsas) {
+        // 如果是自己的LSA
+        if (lsa->header.advertising_router == ntohl(inet_addr(THIS_ROUTER_ID))) {
+            continue;
+        }
+        auto it = nodes.find(lsa->header.advertising_router);
+        // 如果不存在
+        if (it == nodes.end()) {
+            continue;
+        }
+        auto abr_node = it->second;
+        // 如果不可达
+        if (abr_node.dist == UINT32_MAX) {
+            continue;
+        }
+        // 路径长度不需要加lsa的metric
+        Node net_node(lsa->header.link_state_id, lsa->network_mask, nodes[abr_node.id].dist); // + lsa->metric);
+        nodes[net_node.id] = net_node;
+        Edge edge(net_node.id, lsa->metric);
+        edges[abr_node.id].push_back(edge);
+        prevs[net_node.id] = abr_node.id;
+    }
+    // TODO: 构造外部路由
+    this_lsdb.unlock();
 
     // 将结点信息写入路由表
     routes.clear();

@@ -55,6 +55,7 @@ void recv_loop() {
         }
 
         // 查找接口
+        // 这里是有问题的，因为组播不一定是这个接口收到的，但是我只有一个接口...
         auto intf_it = std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
             return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS));
         });

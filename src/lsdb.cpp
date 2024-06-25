@@ -11,25 +11,27 @@
 LSDB this_lsdb;
 
 void LSDB::add(LSA::Base *lsa) noexcept {
-    LSA::Base *old_lsa = nullptr;
+    LSA::Base *old_lsa = get(lsa->header.type, lsa->header.link_state_id, lsa->header.advertising_router);
+    if (old_lsa != nullptr) {
+        if (*lsa > *old_lsa) {
+            del(lsa->header.type, lsa->header.link_state_id, lsa->header.advertising_router);
+        }
+    }
     switch (lsa->header.type) {
     case LSA::Type::ROUTER:
-        old_lsa = get(LSA::Type::ROUTER, lsa->header.link_state_id, lsa->header.advertising_router);
-        if (old_lsa != nullptr) {
-            if (*lsa > *old_lsa) {
-                del(LSA::Type::ROUTER, lsa->header.link_state_id, lsa->header.advertising_router);
-            }
-        }
         router_lsas.emplace_back(static_cast<RouterLSA *>(lsa));
         break;
     case LSA::Type::NETWORK:
-        old_lsa = get(LSA::Type::NETWORK, lsa->header.link_state_id, lsa->header.advertising_router);
-        if (old_lsa != nullptr) {
-            if (*lsa > *old_lsa) {
-                del(LSA::Type::NETWORK, lsa->header.link_state_id, lsa->header.advertising_router);
-            }
-        }
         network_lsas.emplace_back(static_cast<NetworkLSA *>(lsa));
+        break;
+    case LSA::Type::SUMMARY:
+        summary_lsas.emplace_back(static_cast<SummaryLSA *>(lsa));
+        break;
+    case LSA::Type::ASBR_SUMMARY:
+        asbr_summary_lsas.emplace_back(static_cast<ASBRSummaryLSA *>(lsa));
+        break;
+    case LSA::Type::AS_EXTERNAL:
+        as_external_lsas.emplace_back(static_cast<ASExternalLSA *>(lsa));
         break;
     default:
         assert(false && "Not implemented yet");
@@ -54,6 +56,14 @@ void LSDB::del(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept {
             delete *it;
             network_lsas.erase(it);
         }
+    } else if (type == LSA::Type::SUMMARY) {
+        auto it = std::find_if(summary_lsas.begin(), summary_lsas.end(), [ls_id, adv_rtr](SummaryLSA *slsa) {
+            return slsa->header.link_state_id == ls_id && slsa->header.advertising_router == adv_rtr;
+        });
+        if (it != summary_lsas.end()) {
+            delete *it;
+            summary_lsas.erase(it);
+        }
     } else {
         assert(false && "Not implemented yet");
     }
@@ -70,10 +80,25 @@ LSA::Base *LSDB::get(LSA::Type type, uint32_t ls_id, uint32_t adv_rtr) noexcept 
             return nlsa->header.link_state_id == ls_id && nlsa->header.advertising_router == adv_rtr;
         });
         return it != network_lsas.end() ? *it : nullptr;
-    } else {
-        assert(false && "Not implemented yet");
-        return nullptr;
+    } else if (type == LSA::Type::SUMMARY) {
+        auto it = std::find_if(summary_lsas.begin(), summary_lsas.end(), [ls_id, adv_rtr](SummaryLSA *slsa) {
+            return slsa->header.link_state_id == ls_id && slsa->header.advertising_router == adv_rtr;
+        });
+        return it != summary_lsas.end() ? *it : nullptr;
+    } else if (type == LSA::Type::ASBR_SUMMARY) {
+        auto it = std::find_if(
+            asbr_summary_lsas.begin(), asbr_summary_lsas.end(), [ls_id, adv_rtr](ASBRSummaryLSA *asbrslsa) {
+                return asbrslsa->header.link_state_id == ls_id && asbrslsa->header.advertising_router == adv_rtr;
+            });
+        return it != asbr_summary_lsas.end() ? *it : nullptr;
+    } else if (type == LSA::Type::AS_EXTERNAL) {
+        auto it =
+            std::find_if(as_external_lsas.begin(), as_external_lsas.end(), [ls_id, adv_rtr](ASExternalLSA *aselsa) {
+                return aselsa->header.link_state_id == ls_id && aselsa->header.advertising_router == adv_rtr;
+            });
+        return it != as_external_lsas.end() ? *it : nullptr;
     }
+    return nullptr;
 }
 
 RouterLSA *LSDB::get_router_lsa(uint32_t ls_id, uint32_t adv_rtr) {

@@ -309,18 +309,9 @@ void process_dd(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
             lsahdr->network_to_host();
             nbr->link_state_request_list_mtx.lock();
             this_lsdb.lock();
-            if (lsahdr->type == LSA::Type::ROUTER) {
-                if (this_lsdb.get_router_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
-                    nbr->link_state_request_list.push_back(
-                        {(uint32_t)LSA::Type::ROUTER, lsahdr->link_state_id, lsahdr->advertising_router});
-                }
-            } else if (lsahdr->type == LSA::Type::NETWORK) {
-                if (this_lsdb.get_network_lsa(lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
-                    nbr->link_state_request_list.push_back(
-                        {(uint32_t)LSA::Type::NETWORK, lsahdr->link_state_id, lsahdr->advertising_router});
-                }
-            } else {
-                // TODO: 其他类型的LSA
+            if (this_lsdb.get(lsahdr->type, lsahdr->link_state_id, lsahdr->advertising_router) == nullptr) {
+                nbr->link_state_request_list.push_back(
+                    {(uint32_t)lsahdr->type, lsahdr->link_state_id, lsahdr->advertising_router});
             }
             this_lsdb.unlock();
             nbr->link_state_request_list_mtx.unlock();
@@ -426,10 +417,13 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
         LSA::Base *lsa = nullptr;
         this_lsdb.lock();
         if (lsahdr->type == LSA::Type::ROUTER) {
-            lsa = new LSA::Router(ospf_packet + offset);
+            lsa = new RouterLSA(ospf_packet + offset);
             this_lsdb.add(lsa);
         } else if (lsahdr->type == LSA::Type::NETWORK) {
-            lsa = new LSA::Network(ospf_packet + offset);
+            lsa = new NetworkLSA(ospf_packet + offset);
+            this_lsdb.add(lsa);
+        } else if (lsahdr->type == LSA::Type::SUMMARY) {
+            lsa = new SummaryLSA(ospf_packet + offset);
             this_lsdb.add(lsa);
         } else {
             assert(false && "Not implemented yet");

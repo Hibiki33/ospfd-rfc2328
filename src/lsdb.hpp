@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <list>
 #include <mutex>
 #include <netinet/in.h>
 #include <thread>
-#include <vector>
 
 #include "packet.hpp"
 
@@ -14,9 +14,11 @@ class Interface;
 
 class LSDB {
 public:
-    std::vector<RouterLSA *> router_lsas;
-    std::vector<NetworkLSA *> network_lsas;
-    std::vector<SummaryLSA *> summary_lsas; // 事实上，在本实验中不会被使用
+    std::list<RouterLSA *> router_lsas;
+    std::list<NetworkLSA *> network_lsas;
+    std::list<SummaryLSA *> summary_lsas;
+    std::list<ASBRSummaryLSA *> asbr_summary_lsas;
+    std::list<ASExternalLSA *> as_external_lsas;
 
     uint16_t max_age = 3600;     // max time an lsa can survive, default 3600s
     uint16_t max_age_diff = 900; // max time an lsa flood the AS, default 900s
@@ -33,9 +35,17 @@ public:
         for (auto& lsa : summary_lsas) {
             delete lsa;
         }
+        for (auto& lsa : asbr_summary_lsas) {
+            delete lsa;
+        }
+        for (auto& lsa : as_external_lsas) {
+            delete lsa;
+        }
         // router_lsas.clear();
         // network_lsas.clear();
         // summary_lsas.clear();
+        // asbr_summary_lsas.clear();
+        // as_external_lsas.clear();
     }
 
     RouterLSA *get_router_lsa(uint32_t ls_id);
