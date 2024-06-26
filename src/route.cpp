@@ -19,7 +19,7 @@ RoutingTable this_routing_table;
 
 // 查找路由表
 // 返回下一跳地址和接口
-std::pair<in_addr_t, Interface *> RoutingTable::lookup_route(in_addr_t dst, in_addr_t mask) const noexcept {
+std::pair<in_addr_t, Interface *> RoutingTable::lookup_route(in_addr_t dst) const noexcept {
     for (auto& route : routes) {
         if ((dst & route.mask) == route.dst) {
             return {route.next_hop, route.intf};
@@ -208,7 +208,18 @@ void RoutingTable::update_route() noexcept {
                     break;
                 }
             }
+        } else {
+            next_hop = 0;
+            for (auto& intf : this_interfaces) {
+                if (dst == intf->ip_addr & intf->mask) {
+                    interface = intf;
+                    break;
+                }
+            }
         }
+
+        // 无论是直连还是间接，都要有接口
+        assert(interface != nullptr);
 
         Entry entry(dst, mask, next_hop, metric, interface);
         routes.push_back(entry);

@@ -40,13 +40,12 @@ void recv_loop() {
 
             // 解析IP头部
             ip_hdr = reinterpret_cast<iphdr *>(recv_packet);
+            auto src_ip = ntohl(ip_hdr->saddr);
+            auto dst_ip = ntohl(ip_hdr->daddr);
 
             // 处理ICMP数据包
             if (ip_hdr->protocol == IPPROTO_ICMP) {
-                // process_icmp(recv_packet, recv_size);
-                std::cout << "ICMP packet received: "
-                          << "src: " << ip_to_str(ip_hdr->saddr) << ", "
-                          << "dst: " << ip_to_str(ip_hdr->daddr) << std::endl;
+                forward_icmp(recv_packet, recv_size, src_ip, dst_ip);
                 continue;
             }
 
@@ -54,10 +53,6 @@ void recv_loop() {
             if (ip_hdr->protocol != IPPROTO_OSPF) {
                 continue;
             }
-
-            // 如果源地址或目的地址不匹配
-            auto src_ip = ntohl(ip_hdr->saddr);
-            auto dst_ip = ntohl(ip_hdr->daddr);
 
             auto ospf_hdr = reinterpret_cast<OSPF::Header *>(recv_packet + sizeof(iphdr));
             ospf_hdr->network_to_host();

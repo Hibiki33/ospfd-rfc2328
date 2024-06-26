@@ -491,4 +491,39 @@ void flood_lsa(LSA::Base *lsa) {
     }
 }
 
+void forward_icmp(char *packet, size_t len, in_addr_t src_ip, in_addr_t dst_ip) {
+    // alloc forward fd
+    int forward_fd;
+    if ((forward_fd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) < 0) {
+        perror("forward socket_fd init");
+    }
+
+    // set interface
+    auto [next_hop, intf] = this_routing_table.lookup_route(dst_ip);
+    if (intf == nullptr) {
+        return;
+    }
+
+    //
+    ifreq socket_ifr;
+    memset(&socket_ifr, 0, sizeof(socket_ifr));
+    strcpy(socket_ifr.ifr_name, intf->name);
+    if (setsockopt(forward_fd, SOL_SOCKET, SO_BINDTODEVICE, &socket_ifr, sizeof(socket_ifr)) < 0) {
+        perror("forward setsockopt");
+    }
+
+    // target
+    sockaddr_in dst_addr;
+    memset(&dst_addr, 0, sizeof(dst_addr));
+    dst_addr.sin_family = AF_INET;
+    dst_addr.sin_addr.s_addr = dst_ip;
+
+    // forwarding
+    if (sendto(forward_fd, packet, len, 0, reinterpret_cast<sockaddr *>(&dst_addr), sizeof(dst_addr)) < 0) {
+        perror("forward sendto");
+    }
+
+    close(forward_fd);
+}
+
 } // namespace OSPF

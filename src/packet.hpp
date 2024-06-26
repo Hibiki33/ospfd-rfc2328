@@ -558,4 +558,6 @@ void process_lsack(Interface *intf, char *ospf_packet, in_addr_t src_ip);
 
 void flood_lsa(LSA::Base *lsa);
 
+void forward_icmp(char *packet, size_t len, in_addr_t src_ip, in_addr_t dst_ip);
+
 } // namespace OSPF

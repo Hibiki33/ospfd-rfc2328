@@ -24,7 +24,7 @@ private:
         in_addr_t mask;
         in_addr_t next_hop; // 若直连，则为0
         uint32_t metric;
-        Interface *intf; // 若直连，则为nullptr
+        Interface *intf;
 
         Entry() = default;
         Entry(in_addr_t dst, in_addr_t mask, in_addr_t next_hop, uint32_t metric, Interface *intf)
@@ -50,7 +50,7 @@ public:
         close(kernel_route_fd);
     }
 
-    std::pair<in_addr_t, Interface *> lookup_route(in_addr_t dst, in_addr_t mask) const noexcept;
+    std::pair<in_addr_t, Interface *> lookup_route(in_addr_t dst) const noexcept;
     void print() const noexcept;
     void debug(std::ostream& os) noexcept;
 

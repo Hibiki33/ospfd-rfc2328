@@ -9,7 +9,7 @@ class Interface;
 
 namespace OSPF {
 
-extern int recv_fd;
+// extern int recv_fd;
 
 #ifndef IPPROTO_OSPF
 #define IPPROTO_OSPF 89
