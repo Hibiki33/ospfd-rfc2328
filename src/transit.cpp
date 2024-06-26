@@ -21,7 +21,7 @@
 namespace OSPF {
 
 std::atomic<bool> running(false);
-int recv_fd;
+// int recv_fd;
 
 void recv_loop() {
     iphdr *ip_hdr;
@@ -29,59 +29,74 @@ void recv_loop() {
     char recv_frame[ETH_FRAME_LEN];
     auto recv_packet = recv_frame + sizeof(ethhdr);
     while (running) {
-        memset(recv_frame, 0, ETH_FRAME_LEN);
-        // auto recv_size = recv(recv_fd, recv_frame, ETH_FRAME_LEN, 0);
-        auto recv_size = recvfrom(recv_fd, recv_frame, ETH_FRAME_LEN, 0, nullptr, nullptr);
-        if (recv_size < sizeof(iphdr)) {
-            perror("recv_loop: not receive enough data");
-        }
+        for (auto& intf : this_interfaces) {
+            memset(recv_frame, 0, ETH_FRAME_LEN);
 
-        // 解析IP头部
-        ip_hdr = reinterpret_cast<iphdr *>(recv_packet);
-        // 如果不是OSPF协议的数据包
-        if (ip_hdr->protocol != IPPROTO_OSPF) {
-            continue;
-        }
-        // 如果源地址或目的地址不匹配
-        auto src_ip = ntohl(ip_hdr->saddr);
-        auto dst_ip = ntohl(ip_hdr->daddr);
+            // auto recv_size = recv(recv_fd, recv_frame, ETH_FRAME_LEN, 0);
+            auto recv_size = recvfrom(intf->recv_fd, recv_frame, ETH_FRAME_LEN, 0, nullptr, nullptr);
+            if (recv_size < sizeof(iphdr)) {
+                perror("recv_loop: not receive enough data");
+            }
 
-        auto ospf_hdr = reinterpret_cast<OSPF::Header *>(recv_packet + sizeof(iphdr));
-        ospf_hdr->network_to_host();
+            // 解析IP头部
+            ip_hdr = reinterpret_cast<iphdr *>(recv_packet);
 
-        // 如果是本机发送的数据包
-        if (ospf_hdr->router_id == ntohl(inet_addr(THIS_ROUTER_ID))) {
-            continue;
-        }
+            // 处理ICMP数据包
+            if (ip_hdr->protocol == IPPROTO_ICMP) {
+                // process_icmp(recv_packet, recv_size);
+                std::cout << "ICMP packet received: "
+                          << "src: " << ip_to_str(ip_hdr->saddr) << ", "
+                          << "dst: " << ip_to_str(ip_hdr->daddr) << std::endl;
+                continue;
+            }
 
-        // 查找接口
-        // 这里是有问题的，因为组播不一定是这个接口收到的，但是我只有一个接口...
-        auto intf_it = std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
-            return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS));
-        });
-        if (intf_it == this_interfaces.end()) {
-            continue;
-        }
-        intf = *intf_it;
+            // 如果不是OSPF协议的数据包
+            if (ip_hdr->protocol != IPPROTO_OSPF) {
+                continue;
+            }
 
-        switch (ospf_hdr->type) {
-        case OSPF::Type::HELLO:
-            process_hello(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
-            break;
-        case OSPF::Type::DD:
-            process_dd(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
-            break;
-        case OSPF::Type::LSR:
-            process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
-            break;
-        case OSPF::Type::LSU:
-            process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
-            break;
-        case OSPF::Type::LSACK:
-            // process_lsack(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
-            break;
-        default:
-            break;
+            // 如果源地址或目的地址不匹配
+            auto src_ip = ntohl(ip_hdr->saddr);
+            auto dst_ip = ntohl(ip_hdr->daddr);
+
+            auto ospf_hdr = reinterpret_cast<OSPF::Header *>(recv_packet + sizeof(iphdr));
+            ospf_hdr->network_to_host();
+
+            // 如果是本机发送的数据包
+            if (ospf_hdr->router_id == ntohl(inet_addr(THIS_ROUTER_ID))) {
+                continue;
+            }
+
+            // 查找接口
+            // 这里是有问题的，因为组播不一定是这个接口收到的，但是我只有一个接口...
+            // 现在不需要了，因为接口对应了:)
+            // auto intf_it = std::find_if(this_interfaces.begin(), this_interfaces.end(), [dst_ip](Interface *intf) {
+            //     return dst_ip == intf->ip_addr || dst_ip == ntohl(inet_addr(ALL_SPF_ROUTERS));
+            // });
+            // if (intf_it == this_interfaces.end()) {
+            //     continue;
+            // }
+            // intf = *intf_it;
+
+            switch (ospf_hdr->type) {
+            case OSPF::Type::HELLO:
+                process_hello(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+                break;
+            case OSPF::Type::DD:
+                process_dd(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+                break;
+            case OSPF::Type::LSR:
+                process_lsr(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+                break;
+            case OSPF::Type::LSU:
+                process_lsu(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+                break;
+            case OSPF::Type::LSACK:
+                // process_lsack(intf, reinterpret_cast<char *>(ospf_hdr), src_ip);
+                break;
+            default:
+                break;
+            }
         }
     }
 }

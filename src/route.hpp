@@ -6,7 +6,9 @@
 #include <utility>
 #include <vector>
 
+#include <net/route.h>
 #include <netinet/in.h>
+#include <unistd.h>
 
 class Interface;
 namespace LSA {
@@ -37,6 +39,15 @@ public:
     RoutingTable() {
         // 添加代表自己的根结点
         root_id = ntohl(inet_addr(THIS_ROUTER_ID));
+        kernel_route_fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (kernel_route_fd < 0) {
+            perror("init kernel route fd failed");
+            exit(1); // 直接退出
+        }
+    }
+    ~RoutingTable() {
+        reset_kernel_route();
+        close(kernel_route_fd);
     }
 
     std::pair<in_addr_t, Interface *> lookup_route(in_addr_t dst, in_addr_t mask) const noexcept;
@@ -76,6 +87,13 @@ private:
     std::unordered_map<in_addr_t, std::vector<Edge>> edges;
 
     void dijkstra() noexcept;
+
+private:
+    /* 内核路由表相关 */
+    std::list<rtentry> kernel_routes;
+    int kernel_route_fd;
+    void update_kernel_route();
+    void reset_kernel_route();
 
 public:
     void update_route() noexcept;

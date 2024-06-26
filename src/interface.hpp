@@ -79,6 +79,9 @@ public:
     /* 接口名称 */
     char name[IFNAMSIZ];
 
+    /* 接口index */
+    int if_index;
+
 public:
     /* 改变接口状态的事件 */
     void event_interface_up();
@@ -93,8 +96,9 @@ public:
     Neighbor *get_neighbor_by_ip(in_addr_t ip);
 
 public:
-    /* 发送的fd，不在构造函数中初始化，避免抛出异常 */
+    /* loop fd，不在构造函数中初始化，避免抛出异常 */
     int send_fd;
+    int recv_fd;
 
 public:
     Interface() = default;

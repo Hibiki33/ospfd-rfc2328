@@ -109,9 +109,9 @@ void ospf_run() {
     OSPF::running = true;
 
     // alloc recv fd
-    if ((OSPF::recv_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP))) < 0) {
-        perror("recv socket_fd init");
-    }
+    // if ((OSPF::recv_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP))) < 0) {
+    //     perror("recv socket_fd init");
+    // }
 
     std::thread send_thread(OSPF::send_loop);
     std::thread recv_thread(OSPF::recv_loop);

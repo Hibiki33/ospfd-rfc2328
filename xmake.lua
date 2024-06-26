@@ -6,12 +6,22 @@ end
 
 set_languages("c++11")
 
+option("static")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build static binary")
+    add_defines("STATIC")
+
 target("ospf")
     set_kind("binary")
     add_files("src/*.cpp")
     add_includedirs("/usr/include")
     add_linkdirs("/usr/lib")
     add_syslinks("pthread")
+
+    if has_config("static") then
+        add_ldflags("-static", "-static-libgcc", "-static-libstdc++")
+    end
 
     -- define router configuration
     add_defines(
@@ -31,8 +41,8 @@ task("fix-style")
     })
 
 -- 
--- ## Change mode
--- $ xmake f -m debug/release
+-- ## Change mode, options
+-- $ xmake f -m debug/release --static=true/false
 --
 -- ## Build project
 -- $ xmake

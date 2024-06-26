@@ -97,6 +97,7 @@ void RoutingTable::update_route() noexcept {
     nodes.clear();
     prevs.clear();
     edges.clear();
+    // reset_kernel_route();
 
     // 从第一类和第二类LSA中记录结点信息
     this_lsdb.lock();
@@ -213,11 +214,8 @@ void RoutingTable::update_route() noexcept {
         routes.push_back(entry);
     }
 
+    // update_kernel_route();
     std::cout << "Update route done." << std::endl;
-
-#ifdef DEBUG
-    debug(std::cout);
-#endif
 }
 
 void RoutingTable::dijkstra() noexcept {
@@ -251,4 +249,36 @@ void RoutingTable::dijkstra() noexcept {
             }
         }
     }
+}
+
+void RoutingTable::update_kernel_route() {
+    for (auto& entry : routes) {
+        rtentry rtentry;
+        memset(&rtentry, 0, sizeof(rtentry));
+
+        // 设置
+        rtentry.rt_dst.sa_family = AF_INET;
+        rtentry.rt_genmask.sa_family = AF_INET;
+        rtentry.rt_gateway.sa_family = AF_INET;
+        ((sockaddr_in *)&rtentry.rt_dst)->sin_addr.s_addr = htonl(entry.dst);
+        ((sockaddr_in *)&rtentry.rt_genmask)->sin_addr.s_addr = htonl(entry.mask);
+        ((sockaddr_in *)&rtentry.rt_gateway)->sin_addr.s_addr = htonl(entry.next_hop);
+
+        // 写入
+        if (ioctl(kernel_route_fd, SIOCADDRT, &rtentry) < 0) {
+            perror("write kernel route failed");
+        }
+
+        // 备份
+        kernel_routes.push_back(rtentry);
+    }
+}
+
+void RoutingTable::reset_kernel_route() {
+    for (auto& rtentry : kernel_routes) {
+        if (ioctl(kernel_route_fd, SIOCDELRT, &rtentry) < 0) {
+            perror("remove kernel route failed");
+        }
+    }
+    kernel_routes.clear();
 }

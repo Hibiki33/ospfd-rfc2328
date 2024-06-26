@@ -247,7 +247,10 @@ void init_interfaces() {
 
     for (auto i = 0; i < num_ifr; ++i) {
         ifreq *ifr = &ifc.ifc_req[i];
-        if (strcmp(ifr->ifr_name, "lo") == 0) {
+        // if (strcmp(ifr->ifr_name, "lo") == 0) {
+        //     continue;
+        // }
+        if (strstr(ifr->ifr_name, "lo") != nullptr || strstr(ifr->ifr_name, "docker") != nullptr) {
             continue;
         }
 
@@ -267,6 +270,14 @@ void init_interfaces() {
         }
         intf->mask = ntohl(((sockaddr_in *)&ifr->ifr_addr)->sin_addr.s_addr);
         intf->area_id = 0;
+
+        // fetch interface index
+        if (ioctl(fd, SIOCGIFINDEX, ifr) < 0) {
+            perror("ioctl SIOCGIFINDEX");
+            delete intf;
+            continue;
+        }
+        intf->if_index = ifr->ifr_ifindex;
 
         // turn on promisc mode
         if (ioctl(fd, SIOCGIFFLAGS, ifr) < 0) {
@@ -297,6 +308,21 @@ void init_interfaces() {
             continue;
         }
         intf->send_fd = socket_fd;
+
+        // alloc recv fd
+        if ((socket_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP))) < 0) {
+            perror("recv socket_fd init");
+            delete intf;
+            continue;
+        }
+        memset(&socket_ifr, 0, sizeof(ifreq));
+        strcpy(socket_ifr.ifr_name, intf->name);
+        if (setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &socket_ifr, sizeof(ifreq)) < 0) {
+            perror("recv_loop: setsockopt");
+            delete intf;
+            continue;
+        }
+        intf->recv_fd = socket_fd;
 
         // add to interfaces
         this_interfaces.push_back(intf);
