@@ -44,10 +44,10 @@ void recv_loop() {
             auto dst_ip = ntohl(ip_hdr->daddr);
 
             // 处理ICMP数据包
-            if (ip_hdr->protocol == IPPROTO_ICMP) {
-                forward_icmp(recv_packet, recv_size, src_ip, dst_ip);
-                continue;
-            }
+            // if (ip_hdr->protocol == IPPROTO_ICMP) {
+            //     forward_icmp(recv_packet, recv_size, src_ip, dst_ip);
+            //     continue;
+            // }
 
             // 如果不是OSPF协议的数据包
             if (ip_hdr->protocol != IPPROTO_OSPF) {

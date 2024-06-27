@@ -3,10 +3,10 @@
 #include <iomanip>
 #include <iostream>
 #include <queue>
-#include <unistd.h>
 
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "interface.hpp"
 #include "lsdb.hpp"
@@ -97,7 +97,7 @@ void RoutingTable::update_route() noexcept {
     nodes.clear();
     prevs.clear();
     edges.clear();
-    // reset_kernel_route();
+    reset_kernel_route();
 
     // 从第一类和第二类LSA中记录结点信息
     this_lsdb.lock();
@@ -211,7 +211,7 @@ void RoutingTable::update_route() noexcept {
         } else {
             next_hop = 0;
             for (auto& intf : this_interfaces) {
-                if (dst == intf->ip_addr & intf->mask) {
+                if (dst == (intf->ip_addr & intf->mask)) {
                     interface = intf;
                     break;
                 }
@@ -225,7 +225,7 @@ void RoutingTable::update_route() noexcept {
         routes.push_back(entry);
     }
 
-    // update_kernel_route();
+    update_kernel_route();
     std::cout << "Update route done." << std::endl;
 }
 
@@ -269,11 +269,19 @@ void RoutingTable::update_kernel_route() {
 
         // 设置
         rtentry.rt_dst.sa_family = AF_INET;
-        rtentry.rt_genmask.sa_family = AF_INET;
-        rtentry.rt_gateway.sa_family = AF_INET;
         ((sockaddr_in *)&rtentry.rt_dst)->sin_addr.s_addr = htonl(entry.dst);
+        rtentry.rt_genmask.sa_family = AF_INET;
         ((sockaddr_in *)&rtentry.rt_genmask)->sin_addr.s_addr = htonl(entry.mask);
+        rtentry.rt_gateway.sa_family = AF_INET;
         ((sockaddr_in *)&rtentry.rt_gateway)->sin_addr.s_addr = htonl(entry.next_hop);
+        rtentry.rt_metric = entry.metric;
+        // 如果是直连
+        if (entry.next_hop == 0) {
+            rtentry.rt_flags = RTF_UP;
+        } else {
+            rtentry.rt_flags = RTF_UP | RTF_GATEWAY;
+        }
+        rtentry.rt_dev = entry.intf->name;
 
         // 写入
         if (ioctl(kernel_route_fd, SIOCADDRT, &rtentry) < 0) {
@@ -287,6 +295,11 @@ void RoutingTable::update_kernel_route() {
 
 void RoutingTable::reset_kernel_route() {
     for (auto& rtentry : kernel_routes) {
+        // 如果直连，不删除
+        if (!(rtentry.rt_flags & RTF_GATEWAY)) {
+            continue;
+        }
+
         if (ioctl(kernel_route_fd, SIOCDELRT, &rtentry) < 0) {
             perror("remove kernel route failed");
         }
