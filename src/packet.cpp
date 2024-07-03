@@ -447,6 +447,7 @@ void process_lsu(Interface *intf, char *ospf_packet, in_addr_t src_ip) {
     }
 
     // loading_done事件在发送LSR时触发
+    // this_routing_table.update_route();
 
     // 准备发送LSAck
     // 按照标准，LSAck需要每隔一段时间，以接口为主体发送现有所有的确认，这里简化了
@@ -491,6 +492,7 @@ void flood_lsa(LSA::Base *lsa) {
     }
 }
 
+// abort: manually forward ICMP packet
 void forward_icmp(char *packet, size_t len, in_addr_t src_ip, in_addr_t dst_ip) {
     // alloc forward fd
     int forward_fd;

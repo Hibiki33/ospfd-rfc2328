@@ -84,9 +84,12 @@ void RoutingTable::debug(std::ostream& os) noexcept {
             continue;
         }
         in_addr_t prev = node.second.id;
-        while (prev != root_id) {
+        while (prev != root_id && prev != 0) {
             os << ip_to_str(prev) << " <- ";
             prev = prevs[prev];
+        }
+        if (prev == 0) {
+            os << "unreachable" << std::endl;
         }
         os << ip_to_str(root_id) << std::endl;
     }
@@ -114,6 +117,9 @@ void RoutingTable::update_route() noexcept {
                 // 对中转网络，link_id为该网络dr的接口ip
                 // 因此需要查Network LSA找到所有对应的网络结点
                 auto nlsa = this_lsdb.get_network_lsa(link.link_id);
+                if (nlsa == nullptr) {
+                    continue;
+                }
                 for (auto& router_id : nlsa->attached_routers) {
                     if (router_id == lsa->header.link_state_id) {
                         continue;
@@ -195,9 +201,12 @@ void RoutingTable::update_route() noexcept {
         if (prevs[dst] != root_id) {
             in_addr_t prev_hop = prevs[dst];
             in_addr_t next_id = dst;
-            while (prev_hop != root_id) {
+            while (prev_hop != root_id && prev_hop != 0) {
                 next_id = prev_hop;
                 prev_hop = prevs[prev_hop];
+            }
+            if (prev_hop == 0) {
+                continue;
             }
             // 查邻居对应的接口
             for (auto& intf : this_interfaces) {
@@ -267,6 +276,11 @@ void RoutingTable::update_kernel_route() {
         rtentry rtentry;
         memset(&rtentry, 0, sizeof(rtentry));
 
+        // 如果是直连，优先写入
+        if (entry.next_hop == 0) {
+            rtentry.rt_flags = RTF_UP;
+        }
+
         // 设置
         rtentry.rt_dst.sa_family = AF_INET;
         ((sockaddr_in *)&rtentry.rt_dst)->sin_addr.s_addr = htonl(entry.dst);
@@ -275,21 +289,55 @@ void RoutingTable::update_kernel_route() {
         rtentry.rt_gateway.sa_family = AF_INET;
         ((sockaddr_in *)&rtentry.rt_gateway)->sin_addr.s_addr = htonl(entry.next_hop);
         rtentry.rt_metric = entry.metric;
-        // 如果是直连
-        if (entry.next_hop == 0) {
-            rtentry.rt_flags = RTF_UP;
-        } else {
-            rtentry.rt_flags = RTF_UP | RTF_GATEWAY;
-        }
+        
+        // if (entry.next_hop == 0) {
+        //     rtentry.rt_flags = RTF_UP;
+        // } else {
+        //     rtentry.rt_flags = RTF_UP | RTF_GATEWAY;
+        // }
         rtentry.rt_dev = entry.intf->name;
 
         // 写入
         if (ioctl(kernel_route_fd, SIOCADDRT, &rtentry) < 0) {
             perror("write kernel route failed");
+            std::cout << "-- dst: " << ip_to_str(entry.dst) << std::endl;
+            std::cout << "-- mask: " << ip_to_str(entry.mask) << std::endl;
+            std::cout << "-- next_hop: " << ip_to_str(entry.next_hop) << std::endl;
+        } else {
+            // 备份
+            kernel_routes.push_back(rtentry);
         }
+    }
 
-        // 备份
-        kernel_routes.push_back(rtentry);
+    for (auto& entry : routes) {
+        // 然后写入非直连
+        if (entry.next_hop == 0) {
+            continue;
+        }
+        rtentry rtentry;
+        memset(&rtentry, 0, sizeof(rtentry));
+
+        // 设置
+        rtentry.rt_dst.sa_family = AF_INET;
+        ((sockaddr_in *)&rtentry.rt_dst)->sin_addr.s_addr = htonl(entry.dst);
+        rtentry.rt_genmask.sa_family = AF_INET;
+        ((sockaddr_in *)&rtentry.rt_genmask)->sin_addr.s_addr = htonl(entry.mask);
+        rtentry.rt_gateway.sa_family = AF_INET;
+        ((sockaddr_in *)&rtentry.rt_gateway)->sin_addr.s_addr = htonl(entry.next_hop);
+        rtentry.rt_metric = entry.metric;
+        rtentry.rt_flags = RTF_UP | RTF_GATEWAY;
+        rtentry.rt_dev = entry.intf->name;
+
+        // 写入
+        if (ioctl(kernel_route_fd, SIOCADDRT, &rtentry) < 0) {
+            perror("write kernel route failed");
+            std::cout << "-- dst: " << ip_to_str(entry.dst) << std::endl;
+            std::cout << "-- mask: " << ip_to_str(entry.mask) << std::endl;
+            std::cout << "-- next_hop: " << ip_to_str(entry.next_hop) << std::endl;
+        } else {
+            // 备份
+            kernel_routes.push_back(rtentry);
+        }
     }
 }
 
